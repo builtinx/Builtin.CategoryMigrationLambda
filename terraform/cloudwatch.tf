@@ -37,7 +37,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
     FunctionName = aws_lambda_function.category_migration.function_name
   }
   
-  alarm_actions = var.environment == "production" ? [aws_sns_topic.lambda_alerts.arn] : []
+  alarm_actions = var.environment == "production" ? [aws_sns_topic.lambda_alerts[0].arn] : []
   
   tags = local.common_tags
 }
@@ -58,7 +58,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
     FunctionName = aws_lambda_function.category_migration.function_name
   }
   
-  alarm_actions = var.environment == "production" ? [aws_sns_topic.lambda_alerts.arn] : []
+  alarm_actions = var.environment == "production" ? [aws_sns_topic.lambda_alerts[0].arn] : []
   
   tags = local.common_tags
 }

@@ -47,6 +47,11 @@ jobs:
           name: Install .NET dependencies
           command: dotnet restore
       - run:
+          name: Install Amazon.Lambda.Tools
+          command: |
+            dotnet tool install --global Amazon.Lambda.Tools
+            export PATH="$PATH:/home/circleci/.dotnet/tools"
+      - run:
           name: Build Lambda package
           command: |
             cd src/CategoryMigrationLambda
@@ -59,7 +64,7 @@ jobs:
       - persist_to_workspace:
           root: src/CategoryMigrationLambda
           paths:
-            - "*.zip"
+            - bin/Release/net8.0/publish
 
   # Deploy infrastructure with Terraform
   deploy-infrastructure:
