@@ -12,8 +12,8 @@ module "category_migration_lambda" {
   memory_size = 1024
 
   environment_variables = {
-    DOTNET_ENVIRONMENT = local.workspace
-    LOG_LEVEL          = var.lambda_log_level[local.workspace]
+    DOTNET_ENVIRONMENT  = local.workspace
+    LOG_LEVEL           = var.lambda_log_level[local.workspace]
     DynamoDB__TableName = "Users"
   }
 
