@@ -7,6 +7,7 @@
 **/crash.*.log
 **/*.tfvars
 !**/*.tfvars.example
+!**/envs.auto.tfvars
 **/override.tf
 **/override.tf.json
 **/*_override.tf
