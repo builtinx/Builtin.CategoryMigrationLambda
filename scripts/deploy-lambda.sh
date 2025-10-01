@@ -36,7 +36,7 @@ dotnet build --configuration Release
 
 # Package the Lambda function
 echo "📦 Packaging Lambda function..."
-cd src/CategoryMigrationLambda
+cd CategoryMigrationLambda
 dotnet lambda package --configuration Release --framework net8.0
 
 # Get the package file
