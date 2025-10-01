@@ -1,0 +1,229 @@
+version: 2.1
+
+# Use the CircleCI AWS CLI orb for AWS operations
+orbs:
+  aws-cli: circleci/aws-cli@3.1.4
+  terraform: circleci/terraform@3.2.0
+
+# Define reusable jobs
+jobs:
+  # Build and test the .NET Lambda function
+  build-and-test:
+    docker:
+      - image: cimg/dotnet:8.0
+    working_directory: ~/project
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - dotnet-packages-{{ checksum "Directory.Packages.props" }}
+            - dotnet-packages-
+      - run:
+          name: Install .NET dependencies
+          command: dotnet restore
+      - run:
+          name: Build solution
+          command: dotnet build --configuration Release --no-restore
+      - run:
+          name: Run tests
+          command: dotnet test --configuration Release --no-build --verbosity normal
+      - save_cache:
+          paths:
+            - ~/.nuget/packages
+          key: dotnet-packages-{{ checksum "Directory.Packages.props" }}
+
+  # Package the Lambda function
+  package-lambda:
+    docker:
+      - image: cimg/dotnet:8.0
+    working_directory: ~/project
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - dotnet-packages-{{ checksum "Directory.Packages.props" }}
+            - dotnet-packages-
+      - run:
+          name: Install .NET dependencies
+          command: dotnet restore
+      - run:
+          name: Install Amazon.Lambda.Tools
+          command: |
+            dotnet tool install --global Amazon.Lambda.Tools
+            export PATH="$PATH:/home/circleci/.dotnet/tools"
+      - run:
+          name: Build Lambda package
+          command: |
+            cd src/CategoryMigrationLambda
+            dotnet lambda package --configuration Release --framework net8.0
+      - run:
+          name: List package contents
+          command: |
+            cd src/CategoryMigrationLambda
+            find . -name "*.zip" -exec unzip -l {} \;
+      - persist_to_workspace:
+          root: src/CategoryMigrationLambda
+          paths:
+            - bin/Release/net8.0/publish
+
+  # Deploy infrastructure with Terraform
+  deploy-infrastructure:
+    docker:
+      - image: hashicorp/terraform:1.6.0
+    working_directory: ~/project/terraform
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - aws-cli/setup:
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          aws-region: us-west-2
+      - run:
+          name: Terraform Init
+          command: terraform init
+      - run:
+          name: Terraform Plan
+          command: terraform plan -var="environment=production"
+      - run:
+          name: Terraform Apply
+          command: terraform apply -auto-approve -var="environment=production"
+
+  # Deploy Lambda function
+  deploy-lambda:
+    docker:
+      - image: cimg/dotnet:8.0
+    working_directory: ~/project
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - aws-cli/setup:
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          aws-region: us-west-2
+      - run:
+          name: Deploy Lambda Function
+          command: |
+            cd src/CategoryMigrationLambda
+            PACKAGE_FILE=$(find . -name "*.zip" -type f | head -1)
+            if [ -n "$PACKAGE_FILE" ]; then
+              aws lambda update-function-code \
+                --function-name category-migration-lambda \
+                --zip-file fileb://$PACKAGE_FILE
+            else
+              echo "No Lambda package found!"
+              exit 1
+            fi
+      - run:
+          name: Update Lambda Configuration
+          command: |
+            aws lambda update-function-configuration \
+              --function-name category-migration-lambda \
+              --timeout 900 \
+              --memory-size 1024 \
+              --description "Category and subcategory migration for job preferences"
+
+  # Run integration tests
+  integration-tests:
+    docker:
+      - image: cimg/dotnet:8.0
+    working_directory: ~/project
+    steps:
+      - checkout
+      - aws-cli/setup:
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          aws-region: us-west-2
+      - run:
+          name: Test Lambda Function (Dry Run)
+          command: |
+            aws lambda invoke \
+              --function-name category-migration-lambda \
+              --payload '{"type":"all","dryRun":true}' \
+              --cli-binary-format raw-in-base64-out \
+              response.json
+      - run:
+          name: Check Lambda Response
+          command: |
+            cat response.json
+            if grep -q '"success":true' response.json; then
+              echo "Lambda test passed!"
+            else
+              echo "Lambda test failed!"
+              exit 1
+            fi
+
+# Define workflows
+workflows:
+  # Main workflow for feature branches
+  feature-workflow:
+    jobs:
+      - build-and-test:
+          filters:
+            branches:
+              ignore: main
+      - package-lambda:
+          requires:
+            - build-and-test
+          filters:
+            branches:
+              ignore: main
+      - deploy-lambda:
+          requires:
+            - package-lambda
+          filters:
+            branches:
+              ignore: main
+          context: aws-credentials
+
+  # Production workflow for main branch
+  production-workflow:
+    jobs:
+      - build-and-test:
+          filters:
+            branches:
+              only: main
+      - package-lambda:
+          requires:
+            - build-and-test
+          filters:
+            branches:
+              only: main
+      - deploy-infrastructure:
+          requires:
+            - package-lambda
+          filters:
+            branches:
+              only: main
+          context: aws-credentials
+      - deploy-lambda:
+          requires:
+            - deploy-infrastructure
+          filters:
+            branches:
+              only: main
+          context: aws-credentials
+      - integration-tests:
+          requires:
+            - deploy-lambda
+          filters:
+            branches:
+              only: main
+          context: aws-credentials
+
+  # Manual workflow for testing
+  manual-test-workflow:
+    jobs:
+      - build-and-test
+      - package-lambda:
+          requires:
+            - build-and-test
+      - deploy-lambda:
+          requires:
+            - package-lambda
+          context: aws-credentials
+      - integration-tests:
+          requires:
+            - deploy-lambda
+          context: aws-credentials
