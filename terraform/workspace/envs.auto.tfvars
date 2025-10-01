@@ -1,19 +1,5 @@
 # Environment-specific variables
 
-aws_region = "us-east-1"
-
-vault_addr = {
-  "develop" = "https://vault-develop.builtin.com"
-  "staging" = "https://vault-staging.builtin.com"
-  "prod"    = "https://vault-prod.builtin.com"
-}
-
-vault_prefix = {
-  "develop" = "terraform-develop"
-  "staging" = "terraform-staging"
-  "prod"    = "terraform-prod"
-}
-
 lambda_log_level = {
   default    = "Information"
   develop    = "Information"
