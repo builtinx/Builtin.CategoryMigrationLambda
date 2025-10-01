@@ -155,7 +155,7 @@ jobs:
       - setup-zip
       - run: dotnet tool install --local --create-manifest-if-needed Amazon.Lambda.Tools
       # Package Lambda
-      - run: dotnet lambda package -pl CategoryMigrationLambda/CategoryMigrationLambda -o lambda-packages/category-migration-lambda.zip
+      - run: dotnet lambda package -pl CategoryMigrationLambda -o lambda-packages/category-migration-lambda.zip
       - persist_to_workspace:
           root: lambda-packages
           paths:
