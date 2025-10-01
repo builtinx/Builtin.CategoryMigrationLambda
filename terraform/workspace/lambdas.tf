@@ -5,7 +5,7 @@
 module "category_migration_lambda" {
   source = "./modules/lambda"
 
-  lambda_name = "lambda"
+  lambda_name = "lambda-v2"
   handler     = "CategoryMigrationLambda::CategoryMigrationLambda.Function::FunctionHandler"
   runtime     = "dotnet8"
   timeout     = 900
