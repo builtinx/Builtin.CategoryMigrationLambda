@@ -24,6 +24,9 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Amazon.Lambda.Tools" Version="5.8.0" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include=".lambda-test-tool\SavedRequests\TestMessage.json" />
   </ItemGroup>
 </Project>

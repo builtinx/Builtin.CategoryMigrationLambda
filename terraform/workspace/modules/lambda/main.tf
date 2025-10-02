@@ -197,12 +197,12 @@ resource "aws_security_group" "lambda" {
 resource "null_resource" "build_lambda" {
   triggers = {
     # Trigger rebuild when source code changes
-    source_hash = filemd5("${path.module}/../../CategoryMigrationLambda/CategoryMigrationLambda.csproj")
+    source_hash = filemd5("${path.module}/../../../CategoryMigrationLambda/CategoryMigrationLambda.csproj")
   }
 
   provisioner "local-exec" {
     command = <<-EOT
-      cd ${path.module}/../../CategoryMigrationLambda
+      cd ${path.module}/../../../CategoryMigrationLambda
       dotnet restore
       dotnet build --configuration Release
       dotnet lambda package --configuration Release --framework net8.0 --output-package ${path.module}/lambda-package.zip
