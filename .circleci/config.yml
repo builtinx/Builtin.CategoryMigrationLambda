@@ -136,46 +136,6 @@ jobs:
           path: ./terraform/workspace
       - terraform/validate:
           path: ./terraform/workspace
-      - run:
-          name: Import existing resources (if any)
-          command: |
-            cd ./terraform/workspace
-            terraform init
-            terraform workspace select << parameters.workspace >> || terraform workspace new << parameters.workspace >>
-            
-            # Try to import existing resources (ignore errors if they don't exist)
-            echo "🔄 Attempting to import existing resources..."
-            
-            # Import Lambda Function
-            terraform import "module.category_migration_lambda.aws_lambda_function.this" "category-migration-lambda-<< parameters.workspace >>" 2>/dev/null || echo "⚠️  Lambda Function not found or already imported"
-            
-            # Import Lambda Permission for CloudWatch Events
-            terraform import "module.category_migration_lambda.aws_lambda_permission.allow_cloudwatch_events[0]" "category-migration-lambda-<< parameters.workspace >>/AllowExecutionFromCloudWatchEvents" 2>/dev/null || echo "⚠️  Lambda Permission not found or already imported"
-            
-            # Import CloudWatch Event Rule
-            terraform import "module.category_migration_lambda.aws_cloudwatch_event_rule.schedule[0]" "category-migration-lambda-<< parameters.workspace >>-cloudwatch-schedule-<< parameters.workspace >>" 2>/dev/null || echo "⚠️  CloudWatch Event Rule not found or already imported"
-            
-            # Import CloudWatch Event Target
-            # Note: target_id uses title() function which capitalizes first letter of each word
-            # For workspace "develop", lambda_name is "lambda-develop", title() makes it "Lambda-Develop"
-            terraform import "module.category_migration_lambda.aws_cloudwatch_event_target.target[0]" "category-migration-lambda-<< parameters.workspace >>-cloudwatch-schedule-<< parameters.workspace >>/Lambda-$(echo << parameters.workspace >> | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')CloudWatchTarget" 2>/dev/null || echo "⚠️  CloudWatch Event Target not found or already imported"
-            
-            # Import CloudWatch Log Group
-            terraform import "module.category_migration_lambda.aws_cloudwatch_log_group.logs" "/aws/lambda/category-migration-lambda-<< parameters.workspace >>" 2>/dev/null || echo "⚠️  CloudWatch Log Group not found or already imported"
-            
-            # Import IAM Role
-            terraform import "module.category_migration_lambda.aws_iam_role.lambda_role" "category-migration-lambda-<< parameters.workspace >>-role" 2>/dev/null || echo "⚠️  IAM Role not found or already imported"
-            
-            # Import IAM Role Policy Attachments
-            terraform import "module.category_migration_lambda.aws_iam_role_policy_attachment.lambda_basic" "category-migration-lambda-<< parameters.workspace >>-role/arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole" 2>/dev/null || echo "⚠️  IAM Policy Attachment (Basic) not found or already imported"
-            
-            # Import IAM Role Policies
-            terraform import "module.category_migration_lambda.aws_iam_role_policy.dynamodb_access" "category-migration-lambda-<< parameters.workspace >>-role:category-migration-lambda-<< parameters.workspace >>-dynamodb-policy" 2>/dev/null || echo "⚠️  IAM Policy (DynamoDB) not found or already imported"
-            
-            terraform import "module.category_migration_lambda.aws_iam_role_policy.cloudwatch_metrics" "category-migration-lambda-<< parameters.workspace >>-role:category-migration-lambda-<< parameters.workspace >>-cloudwatch-metrics-policy" 2>/dev/null || echo "⚠️  IAM Policy (CloudWatch Metrics) not found or already imported"
-            
-            echo "✅ Resource import attempt completed"
-          working_directory: .
       - terraform/plan:
           path: ./terraform/workspace
           workspace: << parameters.workspace >>
