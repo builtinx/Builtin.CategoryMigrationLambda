@@ -8,14 +8,14 @@ locals {
 
 # Lambda Function
 resource "aws_lambda_function" "this" {
-  filename         = data.archive_file.lambda_package.output_path
+  filename         = data.archive_file.placeholder-code.output_path
   function_name    = local.function_name
   role             = aws_iam_role.lambda_role.arn
   handler          = var.handler
   runtime          = var.runtime
   timeout          = var.timeout
   memory_size      = var.memory_size
-  source_code_hash = data.archive_file.lambda_package.output_base64sha256
+  source_code_hash = data.archive_file.placeholder-code.output_base64sha256
 
   dynamic "environment" {
     for_each = length(var.environment_variables) > 0 ? [1] : []
@@ -193,30 +193,15 @@ resource "aws_security_group" "lambda" {
   })
 }
 
-# Build and package the .NET Lambda function
-resource "null_resource" "build_lambda" {
-  triggers = {
-    # Trigger rebuild when source code changes
-    source_hash = filemd5("${path.module}/../../../CategoryMigrationLambda/CategoryMigrationLambda.csproj")
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      cd ${path.module}/../../../CategoryMigrationLambda
-      dotnet restore
-      dotnet publish --configuration Release --framework net8.0 --output ${path.module}/publish
-      cd ${path.module}/publish
-      zip -r ${path.module}/lambda-package.zip .
-    EOT
-  }
-}
-
-# Use the actual Lambda package
-data "archive_file" "lambda_package" {
-  depends_on = [null_resource.build_lambda]
+# Placeholder archive for Lambda deployment
+data "archive_file" "placeholder-code" {
   type        = "zip"
-  source_file = "${path.module}/lambda-package.zip"
-  output_path = "${path.module}/lambda-package.zip"
+  output_path = "${path.module}/placeholder.zip"
+
+  source {
+    content  = "Placeholder"
+    filename = "placeholder.txt"
+  }
 }
 
 # Data sources
