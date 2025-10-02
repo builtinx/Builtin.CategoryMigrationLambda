@@ -113,14 +113,20 @@ public class CategoryMigrationService : ICategoryMigrationService
         if (!categoryId.HasValue)
             return false;
 
-        // Check if this is a legacy category ID (not in the new range 1-19)
-        if (categoryId.Value >= _legacyCategoryMin || categoryId.Value < 1)
+        // New category IDs are in the range 1-19
+        // Anything outside this range is a legacy ID that needs migration
+        // This includes: 146-157, 390-391, 1001-1018, etc.
+        const int newCategoryMin = 1;
+        const int newCategoryMax = 19;
+
+        if (categoryId.Value < newCategoryMin || categoryId.Value > newCategoryMax)
         {
             return true;
         }
 
-        // Check if any subcategory IDs are legacy (typically >= 1000)
-        if (subcategoryIds?.Any(id => id >= _legacyCategoryMin) == true)
+        // Check if any subcategory IDs are legacy
+        // New subcategory IDs are typically < 200, legacy are >= 200
+        if (subcategoryIds?.Any(id => id >= 200) == true)
         {
             return true;
         }
