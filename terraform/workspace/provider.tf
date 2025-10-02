@@ -4,10 +4,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "5.38.0"
     }
-    vault = {
-      source  = "hashicorp/vault"
-      version = "5.1.0"
-    }
   }
 }
 
@@ -20,8 +16,4 @@ provider "aws" {
     }
   }
   region = "us-west-2"
-}
-
-provider "vault" {
-  address = var.vault_addr[local.workspace]
 }

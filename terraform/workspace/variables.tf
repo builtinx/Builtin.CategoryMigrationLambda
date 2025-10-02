@@ -3,14 +3,6 @@ variable "workspace" {
   default = ""
 }
 
-variable "vault_addr" {
-  type = map(string)
-}
-
-variable "vault_prefix" {
-  type = map(string)
-}
-
 variable "lambda_log_level" {
   type = map(string)
 }
