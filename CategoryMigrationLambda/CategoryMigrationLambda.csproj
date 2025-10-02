@@ -22,7 +22,6 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="Amazon.Lambda.Tools" />
   </ItemGroup>
   <ItemGroup>
     <Content Include=".lambda-test-tool\SavedRequests\TestMessage.json" />

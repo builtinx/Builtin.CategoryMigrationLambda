@@ -204,8 +204,9 @@ resource "null_resource" "build_lambda" {
     command = <<-EOT
       cd ${path.module}/../../../CategoryMigrationLambda
       dotnet restore
-      dotnet build --configuration Release
-      dotnet lambda package --configuration Release --framework net8.0 --output-package ${path.module}/lambda-package.zip
+      dotnet publish --configuration Release --framework net8.0 --output ${path.module}/publish
+      cd ${path.module}/publish
+      zip -r ${path.module}/lambda-package.zip .
     EOT
   }
 }

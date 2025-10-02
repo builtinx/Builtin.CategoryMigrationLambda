@@ -21,10 +21,6 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0" />
     <PackageVersion Include="StyleCop.Analyzers" Version="1.1.118" />
   </ItemGroup>
-  <!-- AWS Lambda Tools -->
-  <ItemGroup>
-    <PackageVersion Include="Amazon.Lambda.Tools" Version="5.13.0" />
-  </ItemGroup>
   <!-- Test Package Versions -->
   <ItemGroup>
     <PackageVersion Include="Amazon.Lambda.TestUtilities" Version="2.0.0" />
