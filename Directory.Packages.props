@@ -23,7 +23,7 @@
   </ItemGroup>
   <!-- AWS Lambda Tools -->
   <ItemGroup>
-    <PackageVersion Include="Amazon.Lambda.Tools" Version="6.0.0" />
+    <PackageVersion Include="Amazon.Lambda.Tools" Version="5.13.0" />
   </ItemGroup>
   <!-- Test Package Versions -->
   <ItemGroup>
