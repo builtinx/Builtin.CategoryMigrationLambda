@@ -87,6 +87,11 @@ resource "aws_cloudwatch_log_group" "logs" {
   name              = local.log_group_name
   retention_in_days = var.log_retention_days
 
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [retention_in_days]
+  }
+
   tags = merge(var.tags, {
     Name = "${local.function_name}-logs"
   })
@@ -95,6 +100,10 @@ resource "aws_cloudwatch_log_group" "logs" {
 # IAM Role for Lambda
 resource "aws_iam_role" "lambda_role" {
   name = "${local.function_name}-role"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

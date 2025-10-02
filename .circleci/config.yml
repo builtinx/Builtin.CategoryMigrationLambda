@@ -136,6 +136,12 @@ jobs:
           path: ./terraform/workspace
       - terraform/validate:
           path: ./terraform/workspace
+      - run:
+          name: Import existing resources (if any)
+          command: |
+            chmod +x scripts/import-existing-resources.sh
+            scripts/import-existing-resources.sh << parameters.workspace >>
+          working_directory: .
       - terraform/plan:
           path: ./terraform/workspace
           workspace: << parameters.workspace >>
@@ -143,9 +149,17 @@ jobs:
           condition:
             equal: [main, << pipeline.git.branch >>]
           steps:
-            - terraform/apply:
-                path: ./terraform/workspace
-                workspace: << parameters.workspace >>
+            - run:
+                name: Apply terraform with error handling
+                command: |
+                  cd ./terraform/workspace
+                  terraform apply -auto-approve || {
+                    echo "❌ Terraform apply failed. Checking for resource conflicts..."
+                    echo "🔍 Running terraform plan to see what's different:"
+                    terraform plan -detailed-exitcode
+                    echo "💡 If you see 'ResourceAlreadyExistsException', the import script may need to be run manually"
+                    exit 1
+                  }
 
   package-lambdas:
     executor: csharp
