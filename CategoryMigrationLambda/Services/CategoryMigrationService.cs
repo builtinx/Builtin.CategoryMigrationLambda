@@ -135,23 +135,12 @@ public class CategoryMigrationService : ICategoryMigrationService
         _logger.LogInformation("Starting scan of table: {TableName}", _tableName);
         _logger.LogInformation("AWS Region: {Region}", _dynamoDbClient.Config.RegionEndpoint?.SystemName ?? "Not set");
 
-        // First, do a quick scan without filter to see if table has ANY records
-        var testScan = table.Scan(new ScanFilter());
-        var testPage = await testScan.GetNextSetAsync();
-        _logger.LogInformation("Test scan (no filter): Found {Count} total records in first page", testPage.Count);
-
-        if (testPage.Count > 0)
-        {
-            // Log the first few Type values to see what's actually in the table
-            var typeValues = testPage.Take(5).Select(d => d.ContainsKey("Type") ? d["Type"].AsString() : "NO_TYPE_ATTRIBUTE").ToList();
-            _logger.LogInformation("Sample Type values from first {Count} records: {Types}", typeValues.Count, string.Join(", ", typeValues));
-        }
-
+        // Note: The Type attribute is not reliably present in DynamoDB (getter-only property issue)
+        // Instead, we identify UserJobPreferences by the presence of CategoryId attribute
         var scanFilter = new ScanFilter();
-        // Filter for UserJobPreferences items
-        scanFilter.AddCondition("Type", ScanOperator.Equal, "UserJobPreferences");
+        scanFilter.AddCondition("CategoryId", ScanOperator.IsNotNull);
 
-        _logger.LogInformation("Now starting filtered scan with: Type = UserJobPreferences");
+        _logger.LogInformation("Starting scan with filter: CategoryId IS NOT NULL (identifies UserJobPreferences)");
 
         // Scan all UserJobPreferences items - we'll filter by legacy category IDs in the processing loop
         // This is more efficient than complex scan conditions
@@ -223,10 +212,10 @@ public class CategoryMigrationService : ICategoryMigrationService
     {
         var table = Table.LoadTable(_dynamoDbClient, _tableName);
         var queryFilter = new QueryFilter("PK", QueryOperator.Equal, $"SUBJECTID#{subjectId}");
-        queryFilter.AddCondition("Type", QueryOperator.Equal, "UserJobPreferences");
+        queryFilter.AddCondition("CategoryId", QueryOperator.IsNotNull);
 
         _logger.LogInformation("Starting query for user {SubjectId} on table: {TableName}", subjectId, _tableName);
-        _logger.LogInformation("Query filter: PK = SUBJECTID#{SubjectId}, Type = UserJobPreferences", subjectId);
+        _logger.LogInformation("Query filter: PK = SUBJECTID#{SubjectId}, CategoryId IS NOT NULL", subjectId);
 
         var search = table.Query(queryFilter);
 
