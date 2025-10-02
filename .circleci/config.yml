@@ -136,52 +136,16 @@ jobs:
           path: ./terraform/workspace
       - terraform/validate:
           path: ./terraform/workspace
-      - run:
-          name: Import existing resources (if any)
-          command: |
-            cd ./terraform/workspace
-            terraform init
-            terraform workspace select << parameters.workspace >> || terraform workspace new << parameters.workspace >>
-            
-            # Try to import existing resources (ignore errors if they don't exist)
-            echo "🔄 Attempting to import existing resources..."
-            
-            # Import Lambda Function
-            terraform import "module.category_migration_lambda.aws_lambda_function.this" "category-migration-lambda-<< parameters.workspace >>" 2>/dev/null || echo "⚠️  Lambda Function not found or already imported"
-            
-            # Import CloudWatch Log Group
-            terraform import "module.category_migration_lambda.aws_cloudwatch_log_group.logs" "/aws/lambda/category-migration-lambda-<< parameters.workspace >>" 2>/dev/null || echo "⚠️  CloudWatch Log Group not found or already imported"
-            
-            # Import IAM Role
-            terraform import "module.category_migration_lambda.aws_iam_role.lambda_role" "category-migration-lambda-<< parameters.workspace >>-role" 2>/dev/null || echo "⚠️  IAM Role not found or already imported"
-            
-            echo "✅ Resource import attempt completed"
-          working_directory: .
       - terraform/plan:
           path: ./terraform/workspace
           workspace: << parameters.workspace >>
-
-  apply-terraform:
-    parameters:
-      workspace:
-        description: "Terraform workspace to use. Workspace name should align with docker image tagging schema. Ex: workspace = develop, tags = develop-abc123,develop-latest"
-        type: enum
-        enum: ["develop", "staging", "prod"]
-    docker:
-      - image: hashicorp/terraform:latest
-    steps:
-      - add_ssh_keys
-      - checkout
-      - terraform/fmt:
-          path: ./terraform/workspace
-      - terraform/validate:
-          path: ./terraform/workspace
-      - terraform/plan:
-          path: ./terraform/workspace
-          workspace: << parameters.workspace >>
-      - terraform/apply:
-          path: ./terraform/workspace
-          workspace: << parameters.workspace >>
+      - when:
+          condition:
+            equal: [main, << pipeline.git.branch >>]
+          steps:
+            - terraform/apply:
+                path: ./terraform/workspace
+                workspace: << parameters.workspace >>
 
   package-lambdas:
     executor: csharp
@@ -271,19 +235,13 @@ workflows:
       # 2. Develop deploy
       - run-terraform:
           <<: *pipeline-test
-          name: terraform-plan-develop
+          name: terraform-develop
           workspace: develop
           requires:
             - test-lambdas
-      - apply-terraform:
-          <<: *pipeline-test
-          name: terraform-apply-develop
-          workspace: develop
-          requires:
-            - terraform-plan-develop
       - package-lambdas:
           requires:
-            - terraform-apply-develop
+            - terraform-develop
           <<: *pipeline-test
       - deploy-lambdas:
           name: deploy-lambdas-develop
@@ -301,21 +259,15 @@ workflows:
             - deploy-lambdas-develop
       - run-terraform:
           <<: *pipeline-staging
-          name: terraform-plan-staging
+          name: terraform-staging
           workspace: staging
           requires:
             - wait-staging
-      - apply-terraform:
-          <<: *pipeline-staging
-          name: terraform-apply-staging
-          workspace: staging
-          requires:
-            - terraform-plan-staging
       - deploy-lambdas:
           name: deploy-lambdas-staging
           environment: staging
           requires:
-            - terraform-apply-staging
+            - terraform-staging
             - package-lambdas
           <<: *pipeline-staging
       - cancel-redundant-builds:
@@ -345,21 +297,15 @@ workflows:
                 - main
       - run-terraform:
           <<: *pipeline-prod
-          name: terraform-plan-prod
+          name: terraform-prod
           workspace: prod
           requires:
             - prod-approved
-      - apply-terraform:
-          <<: *pipeline-prod
-          name: terraform-apply-prod
-          workspace: prod
-          requires:
-            - terraform-plan-prod
       - deploy-lambdas:
           name: deploy-lambdas-prod
           environment: prod
           requires:
-            - terraform-apply-prod
+            - terraform-prod
             - package-lambdas
           <<: *pipeline-prod
       - cancel-redundant-builds:
