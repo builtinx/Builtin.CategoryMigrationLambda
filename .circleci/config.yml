@@ -139,8 +139,20 @@ jobs:
       - run:
           name: Import existing resources (if any)
           command: |
-            chmod +x scripts/import-existing-resources.sh
-            scripts/import-existing-resources.sh << parameters.workspace >>
+            cd ./terraform/workspace
+            terraform init
+            terraform workspace select << parameters.workspace >> || terraform workspace new << parameters.workspace >>
+            
+            # Try to import existing resources (ignore errors if they don't exist)
+            echo "🔄 Attempting to import existing resources..."
+            
+            # Import CloudWatch Log Group
+            terraform import "module.category_migration_lambda.aws_cloudwatch_log_group.logs" "/aws/lambda/category-migration-lambda-<< parameters.workspace >>" 2>/dev/null || echo "⚠️  CloudWatch Log Group not found or already imported"
+            
+            # Import IAM Role
+            terraform import "module.category_migration_lambda.aws_iam_role.lambda_role" "category-migration-lambda-<< parameters.workspace >>-role" 2>/dev/null || echo "⚠️  IAM Role not found or already imported"
+            
+            echo "✅ Resource import attempt completed"
           working_directory: .
       - terraform/plan:
           path: ./terraform/workspace

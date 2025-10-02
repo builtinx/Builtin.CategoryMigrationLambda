@@ -1,16 +1,18 @@
 #!/bin/bash
 
-# Immediate fix for CategoryMigrationLambda terraform state issues
+# Manual fix for CategoryMigrationLambda terraform state issues
 # This script handles the "ResourceAlreadyExistsException" errors
+# NOTE: CircleCI now handles this automatically, this script is for manual use only
 
 set -e
 
 WORKSPACE=${1:-develop}
 TERRAFORM_DIR="./terraform/workspace"
 
-echo "🚀 CategoryMigrationLambda Terraform State Fix"
-echo "=============================================="
+echo "🚀 CategoryMigrationLambda Terraform State Fix (Manual)"
+echo "======================================================"
 echo "Workspace: $WORKSPACE"
+echo "Note: CircleCI now handles resource import automatically"
 echo ""
 
 # Change to terraform directory
