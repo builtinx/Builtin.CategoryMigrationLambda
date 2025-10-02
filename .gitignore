@@ -33,7 +33,7 @@ Thumbs.db
 
 # Build artifacts
 bin/
-obj/
+**/obj/**
 *.dll
 *.pdb
 *.exe
