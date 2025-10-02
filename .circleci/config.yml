@@ -157,21 +157,6 @@ jobs:
       - terraform/plan:
           path: ./terraform/workspace
           workspace: << parameters.workspace >>
-      - when:
-          condition:
-            equal: [main, << pipeline.git.branch >>]
-          steps:
-            - run:
-                name: Apply terraform with error handling
-                command: |
-                  cd ./terraform/workspace
-                  terraform apply -auto-approve || {
-                    echo "❌ Terraform apply failed. Checking for resource conflicts..."
-                    echo "🔍 Running terraform plan to see what's different:"
-                    terraform plan -detailed-exitcode
-                    echo "💡 If you see 'ResourceAlreadyExistsException', the import script may need to be run manually"
-                    exit 1
-                  }
 
   package-lambdas:
     executor: csharp
