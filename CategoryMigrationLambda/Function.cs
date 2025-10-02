@@ -95,7 +95,7 @@ public class Function
     /// </summary>
     /// <param name="sqsEvent">The SQS event for the Lambda function handler to process.</param>
     /// <param name="context">The ILambdaContext that provides methods for logging and describing the Lambda environment.</param>
-    public async Task<SQSEvent> FunctionHandler(SQSEvent sqsEvent, ILambdaContext context)
+    public async Task<SQSEvent> SqsHandler(SQSEvent sqsEvent, ILambdaContext context)
     {
         foreach (var record in sqsEvent.Records)
         {

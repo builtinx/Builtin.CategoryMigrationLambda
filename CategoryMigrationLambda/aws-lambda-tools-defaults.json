@@ -12,5 +12,5 @@
   "function-runtime": "dotnet8",
   "function-memory-size": 1024,
   "function-timeout": 900,
-  "function-handler": "CategoryMigrationLambda::CategoryMigrationLambda.Function::FunctionHandler(CategoryMigrationLambda.Data.MigrationRequestDto, Amazon.Lambda.Core.ILambdaContext)"
+  "function-handler": "CategoryMigrationLambda::CategoryMigrationLambda.Function::FunctionHandler"
 }
