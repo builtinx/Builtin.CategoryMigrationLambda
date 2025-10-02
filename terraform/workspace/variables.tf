@@ -3,7 +3,6 @@ variable "workspace" {
   default = ""
 }
 
-
 variable "lambda_log_level" {
   type = map(string)
 }
