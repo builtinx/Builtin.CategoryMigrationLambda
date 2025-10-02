@@ -27,12 +27,12 @@ output "cloudwatch_log_group_name" {
 
 output "cloudwatch_log_group_arn" {
   description = "ARN of the CloudWatch log group"
-  value       = module.category_migration_lambda.cloudwatch_log_group_name
+  value       = module.category_migration_lambda.cloudwatch_log_group_arn
 }
 
 output "cloudwatch_dashboard_url" {
   description = "URL of the CloudWatch dashboard"
-  value       = "https://us-west-2.console.aws.amazon.com/cloudwatch/home?region=us-west-2#dashboards:name=${aws_cloudwatch_dashboard.lambda_dashboard.dashboard_name}"
+  value       = "https://us-west-2.console.aws.amazon.com/cloudwatch/home?region=us-west-2#dashboards:name=category-migration-lambda-dashboard"
 }
 
 output "sns_topic_arn" {
