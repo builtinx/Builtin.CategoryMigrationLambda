@@ -146,6 +146,9 @@ jobs:
             # Try to import existing resources (ignore errors if they don't exist)
             echo "🔄 Attempting to import existing resources..."
             
+            # Import Lambda Function
+            terraform import "module.category_migration_lambda.aws_lambda_function.this" "category-migration-lambda-<< parameters.workspace >>" 2>/dev/null || echo "⚠️  Lambda Function not found or already imported"
+            
             # Import CloudWatch Log Group
             terraform import "module.category_migration_lambda.aws_cloudwatch_log_group.logs" "/aws/lambda/category-migration-lambda-<< parameters.workspace >>" 2>/dev/null || echo "⚠️  CloudWatch Log Group not found or already imported"
             
