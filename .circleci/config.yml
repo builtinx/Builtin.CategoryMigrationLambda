@@ -158,6 +158,26 @@ jobs:
           path: ./terraform/workspace
           workspace: << parameters.workspace >>
 
+  apply-terraform:
+    parameters:
+      workspace:
+        description: "Terraform workspace to use. Workspace name should align with docker image tagging schema. Ex: workspace = develop, tags = develop-abc123,develop-latest"
+        type: enum
+        enum: ["develop", "staging", "prod"]
+    docker:
+      - image: hashicorp/terraform:latest
+    steps:
+      - add_ssh_keys
+      - checkout
+      - run:
+          name: Apply Terraform changes
+          command: |
+            cd ./terraform/workspace
+            terraform init
+            terraform workspace select << parameters.workspace >> || terraform workspace new << parameters.workspace >>
+            terraform apply -auto-approve
+          working_directory: .
+
   package-lambdas:
     executor: csharp
     steps:
@@ -250,9 +270,15 @@ workflows:
           workspace: develop
           requires:
             - test-lambdas
-      - package-lambdas:
+      - apply-terraform:
+          <<: *pipeline-test
+          name: terraform-apply-develop
+          workspace: develop
           requires:
             - terraform-plan-develop
+      - package-lambdas:
+          requires:
+            - terraform-apply-develop
           <<: *pipeline-test
       - deploy-lambdas:
           name: deploy-lambdas-develop
@@ -270,15 +296,21 @@ workflows:
             - deploy-lambdas-develop
       - run-terraform:
           <<: *pipeline-staging
-          name: terraform-staging
+          name: terraform-plan-staging
           workspace: staging
           requires:
             - wait-staging
+      - apply-terraform:
+          <<: *pipeline-staging
+          name: terraform-apply-staging
+          workspace: staging
+          requires:
+            - terraform-plan-staging
       - deploy-lambdas:
           name: deploy-lambdas-staging
           environment: staging
           requires:
-            - terraform-staging
+            - terraform-apply-staging
             - package-lambdas
           <<: *pipeline-staging
       - cancel-redundant-builds:
@@ -308,15 +340,21 @@ workflows:
                 - main
       - run-terraform:
           <<: *pipeline-prod
-          name: terraform-prod
+          name: terraform-plan-prod
           workspace: prod
           requires:
             - prod-approved
+      - apply-terraform:
+          <<: *pipeline-prod
+          name: terraform-apply-prod
+          workspace: prod
+          requires:
+            - terraform-plan-prod
       - deploy-lambdas:
           name: deploy-lambdas-prod
           environment: prod
           requires:
-            - terraform-prod
+            - terraform-apply-prod
             - package-lambdas
           <<: *pipeline-prod
       - cancel-redundant-builds:
