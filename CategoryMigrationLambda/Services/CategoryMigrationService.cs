@@ -131,14 +131,27 @@ public class CategoryMigrationService : ICategoryMigrationService
     private async Task ScanAndMigrateAllPreferences(MigrationResultDto result, CancellationToken cancellationToken)
     {
         var table = Table.LoadTable(_dynamoDbClient, _tableName);
-        var scanFilter = new ScanFilter();
 
+        _logger.LogInformation("Starting scan of table: {TableName}", _tableName);
+        _logger.LogInformation("AWS Region: {Region}", _dynamoDbClient.Config.RegionEndpoint?.SystemName ?? "Not set");
+
+        // First, do a quick scan without filter to see if table has ANY records
+        var testScan = table.Scan(new ScanFilter());
+        var testPage = await testScan.GetNextSetAsync();
+        _logger.LogInformation("Test scan (no filter): Found {Count} total records in first page", testPage.Count);
+
+        if (testPage.Count > 0)
+        {
+            // Log the first few Type values to see what's actually in the table
+            var typeValues = testPage.Take(5).Select(d => d.ContainsKey("Type") ? d["Type"].AsString() : "NO_TYPE_ATTRIBUTE").ToList();
+            _logger.LogInformation("Sample Type values from first {Count} records: {Types}", typeValues.Count, string.Join(", ", typeValues));
+        }
+
+        var scanFilter = new ScanFilter();
         // Filter for UserJobPreferences items
         scanFilter.AddCondition("Type", ScanOperator.Equal, "UserJobPreferences");
 
-        _logger.LogInformation("Starting scan of table: {TableName}", _tableName);
-        _logger.LogInformation("Scan filter: Type = UserJobPreferences");
-        _logger.LogInformation("AWS Region: {Region}", _dynamoDbClient.Config.RegionEndpoint?.SystemName ?? "Not set");
+        _logger.LogInformation("Now starting filtered scan with: Type = UserJobPreferences");
 
         // Scan all UserJobPreferences items - we'll filter by legacy category IDs in the processing loop
         // This is more efficient than complex scan conditions
