@@ -169,14 +169,16 @@ jobs:
     steps:
       - add_ssh_keys
       - checkout
-      - run:
-          name: Apply Terraform changes
-          command: |
-            cd ./terraform/workspace
-            terraform init
-            terraform workspace select << parameters.workspace >> || terraform workspace new << parameters.workspace >>
-            terraform apply -auto-approve
-          working_directory: .
+      - terraform/fmt:
+          path: ./terraform/workspace
+      - terraform/validate:
+          path: ./terraform/workspace
+      - terraform/plan:
+          path: ./terraform/workspace
+          workspace: << parameters.workspace >>
+      - terraform/apply:
+          path: ./terraform/workspace
+          workspace: << parameters.workspace >>
 
   package-lambdas:
     executor: csharp
