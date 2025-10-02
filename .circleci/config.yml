@@ -174,7 +174,7 @@ jobs:
       - setup-aws
       - aws-cli/install
       # Deploy Lambda
-      - run: aws lambda update-function-code --function-name lambda-<<parameters.environment>> --zip-file fileb://lambda-packages/category-migration-lambda.zip
+      - run: aws lambda update-function-code --function-name category-migration-lambda-<<parameters.environment>> --zip-file fileb://lambda-packages/category-migration-lambda.zip
       - when:
           condition:
             equal: [prod, <<parameters.environment>>]
