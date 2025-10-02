@@ -6,7 +6,7 @@ module "category_migration_lambda" {
   source = "./modules/lambda"
 
   lambda_name = "lambda-${local.workspace}"
-  handler     = "CategoryMigrationLambda::CategoryMigrationLambda.Function::FunctionHandler"
+  handler     = "CategoryMigrationLambda::CategoryMigrationLambda.Function::FunctionHandler(CategoryMigrationLambda.Data.MigrationRequestDto, Amazon.Lambda.Core.ILambdaContext)"
   runtime     = "dotnet8"
   timeout     = 900
   memory_size = 1024
