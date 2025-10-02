@@ -212,10 +212,10 @@ public class CategoryMigrationService : ICategoryMigrationService
     {
         var table = Table.LoadTable(_dynamoDbClient, _tableName);
         var queryFilter = new QueryFilter("PK", QueryOperator.Equal, $"SUBJECTID#{subjectId}");
-        queryFilter.AddCondition("CategoryId", QueryOperator.IsNotNull);
+        // Note: CategoryId presence is checked after retrieving documents (QueryOperator doesn't support IsNotNull)
 
         _logger.LogInformation("Starting query for user {SubjectId} on table: {TableName}", subjectId, _tableName);
-        _logger.LogInformation("Query filter: PK = SUBJECTID#{SubjectId}, CategoryId IS NOT NULL", subjectId);
+        _logger.LogInformation("Query filter: PK = SUBJECTID#{SubjectId} (will filter by CategoryId presence in-memory)", subjectId);
 
         var search = table.Query(queryFilter);
 
@@ -231,6 +231,12 @@ public class CategoryMigrationService : ICategoryMigrationService
             {
                 try
                 {
+                    // Skip documents that don't have CategoryId (not UserJobPreferences)
+                    if (!document.ContainsKey("CategoryId"))
+                    {
+                        continue;
+                    }
+
                     var preference = _dynamoDbContext.FromDocument<UserJobPreferencesDto>(document);
                     result.ProcessedCount++;
                     
