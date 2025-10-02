@@ -132,19 +132,26 @@ public class CategoryMigrationService : ICategoryMigrationService
     {
         var table = Table.LoadTable(_dynamoDbClient, _tableName);
         var scanFilter = new ScanFilter();
-        
+
         // Filter for UserJobPreferences items
         scanFilter.AddCondition("Type", ScanOperator.Equal, "UserJobPreferences");
-        
+
+        _logger.LogInformation("Starting scan of table: {TableName}", _tableName);
+        _logger.LogInformation("Scan filter: Type = UserJobPreferences");
+        _logger.LogInformation("AWS Region: {Region}", _dynamoDbClient.Config.RegionEndpoint?.SystemName ?? "Not set");
+
         // Scan all UserJobPreferences items - we'll filter by legacy category IDs in the processing loop
         // This is more efficient than complex scan conditions
 
         var search = table.Scan(scanFilter);
         var batch = new List<Document>();
-        
+
+        var pageCount = 0;
         do
         {
+            pageCount++;
             var documents = await search.GetNextSetAsync();
+            _logger.LogInformation("Page {PageNumber}: Retrieved {DocumentCount} documents", pageCount, documents.Count);
             
             foreach (var document in documents)
             {
@@ -187,7 +194,11 @@ public class CategoryMigrationService : ICategoryMigrationService
                 }
             }
         } while (!search.IsDone);
-        
+
+        _logger.LogInformation("Scan completed. Total pages scanned: {PageCount}", pageCount);
+        _logger.LogInformation("Total documents processed: {ProcessedCount}, Migrations needed: {MigratedCount}",
+            result.ProcessedCount, result.MigratedCount);
+
         // Write remaining items in batch
         if (batch.Any())
         {
@@ -200,12 +211,19 @@ public class CategoryMigrationService : ICategoryMigrationService
         var table = Table.LoadTable(_dynamoDbClient, _tableName);
         var queryFilter = new QueryFilter("PK", QueryOperator.Equal, $"SUBJECTID#{subjectId}");
         queryFilter.AddCondition("Type", QueryOperator.Equal, "UserJobPreferences");
-        
+
+        _logger.LogInformation("Starting query for user {SubjectId} on table: {TableName}", subjectId, _tableName);
+        _logger.LogInformation("Query filter: PK = SUBJECTID#{SubjectId}, Type = UserJobPreferences", subjectId);
+
         var search = table.Query(queryFilter);
-        
+
+        var pageCount = 0;
         do
         {
+            pageCount++;
             var documents = await search.GetNextSetAsync();
+            _logger.LogInformation("Page {PageNumber}: Retrieved {DocumentCount} documents for user {SubjectId}",
+                pageCount, documents.Count, subjectId);
             
             foreach (var document in documents)
             {
@@ -242,6 +260,10 @@ public class CategoryMigrationService : ICategoryMigrationService
                 }
             }
         } while (!search.IsDone);
+
+        _logger.LogInformation("Query completed for user {SubjectId}. Total pages: {PageCount}", subjectId, pageCount);
+        _logger.LogInformation("Total documents processed: {ProcessedCount}, Migrations needed: {MigratedCount}",
+            result.ProcessedCount, result.MigratedCount);
     }
 
     private async Task WriteBatch(List<Document> batch, MigrationResultDto result)
