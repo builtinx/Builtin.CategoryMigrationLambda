@@ -1,5 +1,8 @@
 # Outputs for Category Migration Lambda Infrastructure
 
+# Data sources
+data "aws_caller_identity" "current" {}
+
 output "lambda_function_name" {
   description = "Name of the Lambda function"
   value       = module.category_migration_lambda.lambda_function_name
@@ -27,7 +30,7 @@ output "cloudwatch_log_group_name" {
 
 output "cloudwatch_log_group_arn" {
   description = "ARN of the CloudWatch log group"
-  value       = module.category_migration_lambda.cloudwatch_log_group_arn
+  value       = "arn:aws:logs:us-west-2:${data.aws_caller_identity.current.account_id}:log-group:${module.category_migration_lambda.cloudwatch_log_group_name}"
 }
 
 output "cloudwatch_dashboard_url" {
