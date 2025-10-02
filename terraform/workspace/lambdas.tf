@@ -22,7 +22,6 @@ module "category_migration_lambda" {
   workspace           = local.workspace
   lambda_log_level    = var.lambda_log_level
 
-
   tags = {
     Environment  = local.workspace
     Service      = "category-migration"
