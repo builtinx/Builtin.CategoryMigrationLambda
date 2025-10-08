@@ -170,9 +170,12 @@ public class CategoryMigrationService : ICategoryMigrationService
                     
                     if (NeedsMigration(preference.CategoryId, preference.SubcategoryIds))
                     {
+                        var oldCategoryId = preference.CategoryId;
+                        var oldSubcategoryIds = preference.SubcategoryIds?.ToList() ?? new List<int>();
+
                         var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
-                            preference.CategoryId, preference.SubcategoryIds);
-                        
+                            preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
+
                         preference.CategoryId = newCategoryId;
                         preference.SubcategoryIds = newSubcategoryIds;
                         
@@ -183,8 +186,9 @@ public class CategoryMigrationService : ICategoryMigrationService
                         
                         result.MigratedCount++;
                         
-                        _logger.LogInformation("Migrated preference {EntityId}: CategoryId {OldCategoryId} -> {NewCategoryId}", 
-                            preference.EntityId, preference.CategoryId, newCategoryId);
+                        _logger.LogInformation("Migrated preference {EntityId}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
+                            preference.EntityId, oldCategoryId, newCategoryId,
+                            string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
                         
                         if (batch.Count >= _batchSize)
                         {
@@ -248,9 +252,12 @@ public class CategoryMigrationService : ICategoryMigrationService
                     
                     if (NeedsMigration(preference.CategoryId, preference.SubcategoryIds))
                     {
+                        var oldCategoryId = preference.CategoryId;
+                        var oldSubcategoryIds = preference.SubcategoryIds?.ToList() ?? new List<int>();
+
                         var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
-                            preference.CategoryId, preference.SubcategoryIds);
-                        
+                            preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
+
                         preference.CategoryId = newCategoryId;
                         preference.SubcategoryIds = newSubcategoryIds;
                         
@@ -261,8 +268,9 @@ public class CategoryMigrationService : ICategoryMigrationService
                         
                         result.MigratedCount++;
                         
-                        _logger.LogInformation("Migrated preference {EntityId} for user {SubjectId}", 
-                            preference.EntityId, subjectId);
+                        _logger.LogInformation("Migrated preference {EntityId} for user {SubjectId}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
+                            preference.EntityId, subjectId, oldCategoryId, newCategoryId,
+                            string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
                     }
                 }
                 catch (Exception ex)
