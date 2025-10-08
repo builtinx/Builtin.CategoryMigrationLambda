@@ -1,4 +1,3 @@
-using BuiltIn.UsersApi.Shared;
 using CategoryMigrationLambda.Data;
 
 namespace CategoryMigrationLambda.Services;

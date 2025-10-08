@@ -1,7 +1,6 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.DocumentModel;
-using BuiltIn.UsersApi.Shared.Preferences;
 using CategoryMigrationLambda.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -175,7 +174,7 @@ public class CategoryMigrationService : ICategoryMigrationService
                         var oldSubcategoryIds = preference.SubcategoryIds?.ToList() ?? new List<int>();
 
                         var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
-                            preference.CategoryId, preference.SubcategoryIds);
+                            preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
 
                         preference.CategoryId = newCategoryId;
                         preference.SubcategoryIds = newSubcategoryIds;
@@ -257,7 +256,7 @@ public class CategoryMigrationService : ICategoryMigrationService
                         var oldSubcategoryIds = preference.SubcategoryIds?.ToList() ?? new List<int>();
 
                         var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
-                            preference.CategoryId, preference.SubcategoryIds);
+                            preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
 
                         preference.CategoryId = newCategoryId;
                         preference.SubcategoryIds = newSubcategoryIds;
