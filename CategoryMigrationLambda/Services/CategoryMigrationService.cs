@@ -12,29 +12,26 @@ namespace CategoryMigrationLambda.Services;
 /// </summary>
 public class CategoryMigrationService : ICategoryMigrationService
 {
-    private readonly AmazonDynamoDBClient _dynamoDbClient;
-    private readonly DynamoDBContext _dynamoDbContext;
+    private readonly IAmazonDynamoDB _dynamoDbClient;
+    private readonly IDynamoDBContext _dynamoDbContext;
     private readonly ILogger<CategoryMigrationService> _logger;
     private readonly IConfiguration _configuration;
     private readonly string _tableName;
     private readonly int _batchSize;
-    private readonly int _legacyCategoryMin;
-    private readonly int _legacyCategoryMax;
 
     public CategoryMigrationService(
+        IAmazonDynamoDB dynamoDbClient,
+        IDynamoDBContext dynamoDbContext,
         ILogger<CategoryMigrationService> logger,
         IConfiguration configuration)
     {
+        _dynamoDbClient = dynamoDbClient ?? throw new ArgumentNullException(nameof(dynamoDbClient));
+        _dynamoDbContext = dynamoDbContext ?? throw new ArgumentNullException(nameof(dynamoDbContext));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
-        
-        _dynamoDbClient = new AmazonDynamoDBClient();
-        _dynamoDbContext = new DynamoDBContext(_dynamoDbClient);
-        
+
         _tableName = _configuration["DynamoDB:TableName"] ?? "Users";
-        _batchSize = _configuration.GetValue<int>("Migration:BatchSize", 25);
-        _legacyCategoryMin = _configuration.GetValue<int>("Migration:LegacyCategoryIdRange:Min", 1000);
-        _legacyCategoryMax = _configuration.GetValue<int>("Migration:LegacyCategoryIdRange:Max", 1019);
+        _batchSize = _configuration.GetValue("Migration:BatchSize", 25);
     }
 
     public async Task<MigrationResultDto> MigrateAllPreferencesAsync(bool dryRun = false, CancellationToken cancellationToken = default)
@@ -108,7 +105,7 @@ public class CategoryMigrationService : ICategoryMigrationService
         return result;
     }
 
-    public bool NeedsMigration(int? categoryId, List<int> subcategoryIds)
+    public bool NeedsMigration(int? categoryId, List<int>? subcategoryIds)
     {
         if (!categoryId.HasValue)
             return false;
@@ -126,12 +123,7 @@ public class CategoryMigrationService : ICategoryMigrationService
 
         // Check if any subcategory IDs are legacy
         // New subcategory IDs are typically < 200, legacy are >= 200
-        if (subcategoryIds?.Any(id => id >= 200) == true)
-        {
-            return true;
-        }
-
-        return false;
+        return (subcategoryIds?.Any(id => id >= 200)).GetValueOrDefault();
     }
 
     private async Task ScanAndMigrateAllPreferences(MigrationResultDto result, CancellationToken cancellationToken)
@@ -158,7 +150,7 @@ public class CategoryMigrationService : ICategoryMigrationService
         do
         {
             pageCount++;
-            var documents = await search.GetNextSetAsync();
+            var documents = await search.GetNextSetAsync(cancellationToken);
             _logger.LogInformation("Page {PageNumber}: Retrieved {DocumentCount} documents", pageCount, documents.Count);
             
             foreach (var document in documents)
@@ -178,21 +170,21 @@ public class CategoryMigrationService : ICategoryMigrationService
 
                         preference.CategoryId = newCategoryId;
                         preference.SubcategoryIds = newSubcategoryIds;
-                        
+
                         if (!result.DryRun)
                         {
                             batch.Add(_dynamoDbContext.ToDocument(preference));
                         }
-                        
+
                         result.MigratedCount++;
-                        
+
                         _logger.LogInformation("Migrated preference {EntityId}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
                             preference.EntityId, oldCategoryId, newCategoryId,
                             string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
                         
                         if (batch.Count >= _batchSize)
                         {
-                            await WriteBatch(batch, result);
+                            await WriteBatch(batch, result, cancellationToken);
                             batch.Clear();
                         }
                     }
@@ -205,7 +197,7 @@ public class CategoryMigrationService : ICategoryMigrationService
                     _logger.LogError(ex, error);
                 }
             }
-        } while (!search.IsDone);
+        } while (!search.IsDone && !cancellationToken.IsCancellationRequested);
 
         _logger.LogInformation("Scan completed. Total pages scanned: {PageCount}", pageCount);
         _logger.LogInformation("Total documents processed: {ProcessedCount}, Migrations needed: {MigratedCount}",
@@ -214,7 +206,7 @@ public class CategoryMigrationService : ICategoryMigrationService
         // Write remaining items in batch
         if (batch.Any())
         {
-            await WriteBatch(batch, result);
+            await WriteBatch(batch, result, cancellationToken);
         }
     }
 
@@ -233,10 +225,10 @@ public class CategoryMigrationService : ICategoryMigrationService
         do
         {
             pageCount++;
-            var documents = await search.GetNextSetAsync();
+            var documents = await search.GetNextSetAsync(cancellationToken);
             _logger.LogInformation("Page {PageNumber}: Retrieved {DocumentCount} documents for user {SubjectId}",
                 pageCount, documents.Count, subjectId);
-            
+
             foreach (var document in documents)
             {
                 try
@@ -260,14 +252,14 @@ public class CategoryMigrationService : ICategoryMigrationService
 
                         preference.CategoryId = newCategoryId;
                         preference.SubcategoryIds = newSubcategoryIds;
-                        
+
                         if (!result.DryRun)
                         {
                             await _dynamoDbContext.SaveAsync(preference, cancellationToken);
                         }
-                        
+
                         result.MigratedCount++;
-                        
+
                         _logger.LogInformation("Migrated preference {EntityId} for user {SubjectId}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
                             preference.EntityId, subjectId, oldCategoryId, newCategoryId,
                             string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
@@ -281,26 +273,26 @@ public class CategoryMigrationService : ICategoryMigrationService
                     _logger.LogError(ex, error);
                 }
             }
-        } while (!search.IsDone);
+        } while (!search.IsDone && !cancellationToken.IsCancellationRequested);
 
         _logger.LogInformation("Query completed for user {SubjectId}. Total pages: {PageCount}", subjectId, pageCount);
         _logger.LogInformation("Total documents processed: {ProcessedCount}, Migrations needed: {MigratedCount}",
             result.ProcessedCount, result.MigratedCount);
     }
 
-    private async Task WriteBatch(List<Document> batch, MigrationResultDto result)
+    private async Task WriteBatch(List<Document> batch, MigrationResultDto result, CancellationToken cancellationToken)
     {
         try
         {
             var table = Table.LoadTable(_dynamoDbClient, _tableName);
             var batchWrite = table.CreateBatchWrite();
-            
+
             foreach (var document in batch)
             {
                 batchWrite.AddDocumentToPut(document);
             }
-            
-            await batchWrite.ExecuteAsync();
+
+            await batchWrite.ExecuteAsync(cancellationToken);
             _logger.LogInformation("Successfully wrote batch of {Count} items", batch.Count);
         }
         catch (Exception ex)
@@ -313,8 +305,8 @@ public class CategoryMigrationService : ICategoryMigrationService
     }
 
     private (int? NewCategoryId, List<int> NewSubcategoryIds) MigrateCategoryAndSubcategories(
-        int? legacyCategoryId, 
-        List<int> legacySubcategoryIds)
+        int? legacyCategoryId,
+        List<int>? legacySubcategoryIds)
     {
         var newSubcategoryIds = new List<int>();
         int? newCategoryId = null;
@@ -338,7 +330,7 @@ public class CategoryMigrationService : ICategoryMigrationService
             foreach (var legacySubcategoryId in legacySubcategoryIds)
             {
                 var mappingKey = (legacyCategoryId, legacySubcategoryId);
-                
+
                 if (CategoryMappings.CategoryMappingRulesByIds.TryGetValue(mappingKey, out var mapping))
                 {
                     // Set the new category ID (should be consistent across all subcategories)

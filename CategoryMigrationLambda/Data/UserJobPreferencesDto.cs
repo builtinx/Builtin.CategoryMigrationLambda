@@ -25,7 +25,7 @@ public class UserJobPreferencesDto
     public int? CategoryId { get; set; }
 
     [DynamoDBProperty]
-    public List<int> SubcategoryIds { get; set; } = new();
+    public List<int>? SubcategoryIds { get; set; } = new();
 
     // Additional common fields that might exist in UserJobPreferences
     [DynamoDBProperty]

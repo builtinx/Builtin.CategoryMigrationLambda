@@ -1,3 +1,5 @@
+using Amazon.DynamoDBv2;
+using Amazon.DynamoDBv2.DataModel;
 using CategoryMigrationLambda.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +16,12 @@ public static class ServiceCollectionExtensions
 
         services.AddLogging(x => x.AddLambdaLogger(new LambdaLoggerOptions(configuration)))
             .AddSingleton<IConfiguration>(_ => configuration)
+            .AddSingleton<IAmazonDynamoDB, AmazonDynamoDBClient>()
+            .AddSingleton<IDynamoDBContext>(sp =>
+            {
+                var dynamoDbClient = sp.GetRequiredService<IAmazonDynamoDB>();
+                return new DynamoDBContext(dynamoDbClient);
+            })
             .AddScoped<ICategoryMigrationService, CategoryMigrationService>();
 
         return services;
