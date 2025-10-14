@@ -159,7 +159,7 @@ public class CategoryMigrationService : ICategoryMigrationService
                 {
                     var preference = _dynamoDbContext.FromDocument<UserJobPreferencesDto>(document);
                     result.ProcessedCount++;
-                    
+
                     if (NeedsMigration(preference.CategoryId, preference.SubcategoryIds))
                     {
                         var oldCategoryId = preference.CategoryId;
@@ -168,12 +168,19 @@ public class CategoryMigrationService : ICategoryMigrationService
                         var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
                             preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
 
-                        preference.CategoryId = newCategoryId;
-                        preference.SubcategoryIds = newSubcategoryIds;
-
                         if (!result.DryRun)
                         {
-                            batch.Add(_dynamoDbContext.ToDocument(preference));
+                            // Update the original document directly to preserve all fields
+                            document["CategoryId"] = newCategoryId;
+
+                            var subcategoryIdsList = new PrimitiveList(DynamoDBEntryType.Numeric);
+                            foreach (var id in newSubcategoryIds)
+                            {
+                                subcategoryIdsList.Add(new Primitive(id.ToString(), true));
+                            }
+                            document["SubcategoryIds"] = subcategoryIdsList;
+
+                            batch.Add(document);
                         }
 
                         result.MigratedCount++;
@@ -181,10 +188,10 @@ public class CategoryMigrationService : ICategoryMigrationService
                         _logger.LogInformation("Migrated preference {EntityId}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
                             preference.EntityId, oldCategoryId, newCategoryId,
                             string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
-                        
+
                         if (batch.Count >= _batchSize)
                         {
-                            await WriteBatch(batch, result, cancellationToken);
+                            await WriteBatch(table, batch, result, cancellationToken);
                             batch.Clear();
                         }
                     }
@@ -206,7 +213,7 @@ public class CategoryMigrationService : ICategoryMigrationService
         // Write remaining items in batch
         if (batch.Any())
         {
-            await WriteBatch(batch, result, cancellationToken);
+            await WriteBatch(table, batch, result, cancellationToken);
         }
     }
 
@@ -241,7 +248,7 @@ public class CategoryMigrationService : ICategoryMigrationService
 
                     var preference = _dynamoDbContext.FromDocument<UserJobPreferencesDto>(document);
                     result.ProcessedCount++;
-                    
+
                     if (NeedsMigration(preference.CategoryId, preference.SubcategoryIds))
                     {
                         var oldCategoryId = preference.CategoryId;
@@ -250,12 +257,19 @@ public class CategoryMigrationService : ICategoryMigrationService
                         var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
                             preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
 
-                        preference.CategoryId = newCategoryId;
-                        preference.SubcategoryIds = newSubcategoryIds;
-
                         if (!result.DryRun)
                         {
-                            await _dynamoDbContext.SaveAsync(preference, cancellationToken);
+                            // Update the original document directly to preserve all fields
+                            document["CategoryId"] = newCategoryId;
+
+                            var subcategoryIdsList = new PrimitiveList(DynamoDBEntryType.Numeric);
+                            foreach (var id in newSubcategoryIds)
+                            {
+                                subcategoryIdsList.Add(new Primitive(id.ToString(), true));
+                            }
+                            document["SubcategoryIds"] = subcategoryIdsList;
+
+                            await table.PutItemAsync(document, cancellationToken);
                         }
 
                         result.MigratedCount++;
@@ -280,11 +294,10 @@ public class CategoryMigrationService : ICategoryMigrationService
             result.ProcessedCount, result.MigratedCount);
     }
 
-    private async Task WriteBatch(List<Document> batch, MigrationResultDto result, CancellationToken cancellationToken)
+    private async Task WriteBatch(Table table, List<Document> batch, MigrationResultDto result, CancellationToken cancellationToken)
     {
         try
         {
-            var table = Table.LoadTable(_dynamoDbClient, _tableName);
             var batchWrite = table.CreateBatchWrite();
 
             foreach (var document in batch)
