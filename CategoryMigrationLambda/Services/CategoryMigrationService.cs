@@ -15,6 +15,7 @@ public class CategoryMigrationService : ICategoryMigrationService
     private readonly AmazonDynamoDBClient _dynamoDbClient;
     private readonly DynamoDBContext _dynamoDbContext;
     private readonly ILogger<CategoryMigrationService> _logger;
+    private readonly IConfiguration _configuration;
     private readonly string _tableName;
     private readonly int _batchSize;
 
@@ -23,13 +24,13 @@ public class CategoryMigrationService : ICategoryMigrationService
         IConfiguration configuration)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        var configuration1 = configuration ?? throw new ArgumentNullException(nameof(configuration));
-        
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+
         _dynamoDbClient = new AmazonDynamoDBClient();
         _dynamoDbContext = new DynamoDBContext(_dynamoDbClient);
-        
-        _tableName = configuration1["DynamoDB:TableName"] ?? "Users";
-        _batchSize = configuration1.GetValue("Migration:BatchSize", 25);
+
+        _tableName = _configuration["DynamoDB:TableName"] ?? "Users";
+        _batchSize = _configuration.GetValue("Migration:BatchSize", 25);
     }
 
     public async Task<MigrationResultDto> MigrateAllPreferencesAsync(bool dryRun = false, CancellationToken cancellationToken = default)
