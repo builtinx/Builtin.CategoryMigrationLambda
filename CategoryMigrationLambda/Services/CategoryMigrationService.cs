@@ -185,7 +185,7 @@ public class CategoryMigrationService : ICategoryMigrationService
 
                         if (batch.Count >= _batchSize)
                         {
-                            await WriteBatch(batch, result, cancellationToken);
+                            await WriteBatch(table, batch, result, cancellationToken);
                             batch.Clear();
                         }
                     }
@@ -207,7 +207,7 @@ public class CategoryMigrationService : ICategoryMigrationService
         // Write remaining items in batch
         if (batch.Any())
         {
-            await WriteBatch(batch, result, cancellationToken);
+            await WriteBatch(table, batch, result, cancellationToken);
         }
     }
 
@@ -282,11 +282,10 @@ public class CategoryMigrationService : ICategoryMigrationService
             result.ProcessedCount, result.MigratedCount);
     }
 
-    private async Task WriteBatch(List<Document> batch, MigrationResultDto result, CancellationToken cancellationToken)
+    private async Task WriteBatch(Table table, List<Document> batch, MigrationResultDto result, CancellationToken cancellationToken)
     {
         try
         {
-            var table = Table.LoadTable(_dynamoDbClient, _tableName);
             var batchWrite = table.CreateBatchWrite();
 
             foreach (var document in batch)
