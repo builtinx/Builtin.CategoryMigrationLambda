@@ -172,7 +172,7 @@ public class CategoryMigrationService : ICategoryMigrationService
                         {
                             // Update the original document directly to preserve all fields
                             document["CategoryId"] = newCategoryId;
-                            document["SubcategoryIds"] = new DynamoDBList(newSubcategoryIds.Select(id => new Primitive(id)).ToList());
+                            document["SubcategoryIds"] = new DynamoDBList(newSubcategoryIds.Select(id => new Primitive(id.ToString())).ToList());
 
                             batch.Add(document);
                         }
@@ -255,9 +255,8 @@ public class CategoryMigrationService : ICategoryMigrationService
                         {
                             // Update the original document directly to preserve all fields
                             document["CategoryId"] = newCategoryId;
-                            document["SubcategoryIds"] = new DynamoDBList(newSubcategoryIds.Select(id => new Primitive(id)).ToList());
+                            document["SubcategoryIds"] = new DynamoDBList(newSubcategoryIds.Select(id => new Primitive(id.ToString())).ToList());
 
-                            var table = Table.LoadTable(_dynamoDbClient, _tableName);
                             await table.PutItemAsync(document, cancellationToken);
                         }
 
