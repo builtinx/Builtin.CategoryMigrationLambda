@@ -159,7 +159,7 @@ public class CategoryMigrationService : ICategoryMigrationService
                 {
                     var preference = _dynamoDbContext.FromDocument<UserJobPreferencesDto>(document);
                     result.ProcessedCount++;
-                    
+
                     if (NeedsMigration(preference.CategoryId, preference.SubcategoryIds))
                     {
                         var oldCategoryId = preference.CategoryId;
@@ -168,12 +168,13 @@ public class CategoryMigrationService : ICategoryMigrationService
                         var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
                             preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
 
-                        preference.CategoryId = newCategoryId;
-                        preference.SubcategoryIds = newSubcategoryIds;
-
                         if (!result.DryRun)
                         {
-                            batch.Add(_dynamoDbContext.ToDocument(preference));
+                            // Update the original document directly to preserve all fields
+                            document["CategoryId"] = newCategoryId;
+                            document["SubcategoryIds"] = new DynamoDBList(newSubcategoryIds.Select(id => new Primitive(id)).ToList());
+
+                            batch.Add(document);
                         }
 
                         result.MigratedCount++;
@@ -181,7 +182,7 @@ public class CategoryMigrationService : ICategoryMigrationService
                         _logger.LogInformation("Migrated preference {EntityId}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
                             preference.EntityId, oldCategoryId, newCategoryId,
                             string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
-                        
+
                         if (batch.Count >= _batchSize)
                         {
                             await WriteBatch(batch, result, cancellationToken);
@@ -241,7 +242,7 @@ public class CategoryMigrationService : ICategoryMigrationService
 
                     var preference = _dynamoDbContext.FromDocument<UserJobPreferencesDto>(document);
                     result.ProcessedCount++;
-                    
+
                     if (NeedsMigration(preference.CategoryId, preference.SubcategoryIds))
                     {
                         var oldCategoryId = preference.CategoryId;
@@ -250,12 +251,14 @@ public class CategoryMigrationService : ICategoryMigrationService
                         var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
                             preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
 
-                        preference.CategoryId = newCategoryId;
-                        preference.SubcategoryIds = newSubcategoryIds;
-
                         if (!result.DryRun)
                         {
-                            await _dynamoDbContext.SaveAsync(preference, cancellationToken);
+                            // Update the original document directly to preserve all fields
+                            document["CategoryId"] = newCategoryId;
+                            document["SubcategoryIds"] = new DynamoDBList(newSubcategoryIds.Select(id => new Primitive(id)).ToList());
+
+                            var table = Table.LoadTable(_dynamoDbClient, _tableName);
+                            await table.PutItemAsync(document, cancellationToken);
                         }
 
                         result.MigratedCount++;
