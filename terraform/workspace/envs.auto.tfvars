@@ -8,10 +8,10 @@ lambda_log_level = {
 }
 
 schedule_expression = {
-  default    = "rate(5 minutes)"
-  develop    = "rate(5 minutes)"
-  staging    = "rate(15 minutes)"
-  production = "rate(1 hour)"
+  default    = null
+  develop    = null
+  staging    = null
+  production = null
 }
 
 log_retention_days = {
