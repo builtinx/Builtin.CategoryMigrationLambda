@@ -30,5 +30,5 @@ public interface ICategoryMigrationService
     /// <param name="categoryId">The category ID</param>
     /// <param name="subcategoryIds">The subcategory IDs</param>
     /// <returns>True if migration is needed</returns>
-    bool NeedsMigration(int? categoryId, List<int> subcategoryIds);
+    bool NeedsMigration(int? categoryId, List<int>? subcategoryIds);
 }
