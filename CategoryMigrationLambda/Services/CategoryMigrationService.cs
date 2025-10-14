@@ -15,26 +15,21 @@ public class CategoryMigrationService : ICategoryMigrationService
     private readonly AmazonDynamoDBClient _dynamoDbClient;
     private readonly DynamoDBContext _dynamoDbContext;
     private readonly ILogger<CategoryMigrationService> _logger;
-    private readonly IConfiguration _configuration;
     private readonly string _tableName;
     private readonly int _batchSize;
-    private readonly int _legacyCategoryMin;
-    private readonly int _legacyCategoryMax;
 
     public CategoryMigrationService(
         ILogger<CategoryMigrationService> logger,
         IConfiguration configuration)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        var configuration1 = configuration ?? throw new ArgumentNullException(nameof(configuration));
         
         _dynamoDbClient = new AmazonDynamoDBClient();
         _dynamoDbContext = new DynamoDBContext(_dynamoDbClient);
         
-        _tableName = _configuration["DynamoDB:TableName"] ?? "Users";
-        _batchSize = _configuration.GetValue<int>("Migration:BatchSize", 25);
-        _legacyCategoryMin = _configuration.GetValue<int>("Migration:LegacyCategoryIdRange:Min", 1000);
-        _legacyCategoryMax = _configuration.GetValue<int>("Migration:LegacyCategoryIdRange:Max", 1019);
+        _tableName = configuration1["DynamoDB:TableName"] ?? "Users";
+        _batchSize = configuration1.GetValue("Migration:BatchSize", 25);
     }
 
     public async Task<MigrationResultDto> MigrateAllPreferencesAsync(bool dryRun = false, CancellationToken cancellationToken = default)
@@ -53,7 +48,7 @@ public class CategoryMigrationService : ICategoryMigrationService
 
         try
         {
-            await ScanAndMigrateAllPreferences(result, cancellationToken);
+            await ScanAndMigrateAllPreferences(result);
         }
         catch (Exception ex)
         {
@@ -126,15 +121,10 @@ public class CategoryMigrationService : ICategoryMigrationService
 
         // Check if any subcategory IDs are legacy
         // New subcategory IDs are typically < 200, legacy are >= 200
-        if (subcategoryIds?.Any(id => id >= 200) == true)
-        {
-            return true;
-        }
-
-        return false;
+        return subcategoryIds.Any(id => id >= 200);
     }
 
-    private async Task ScanAndMigrateAllPreferences(MigrationResultDto result, CancellationToken cancellationToken)
+    private async Task ScanAndMigrateAllPreferences(MigrationResultDto result)
     {
         var table = Table.LoadTable(_dynamoDbClient, _tableName);
 
@@ -171,10 +161,10 @@ public class CategoryMigrationService : ICategoryMigrationService
                     if (NeedsMigration(preference.CategoryId, preference.SubcategoryIds))
                     {
                         var oldCategoryId = preference.CategoryId;
-                        var oldSubcategoryIds = preference.SubcategoryIds?.ToList() ?? new List<int>();
+                        var oldSubcategoryIds = preference.SubcategoryIds.ToList();
 
                         var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
-                            preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
+                            preference.CategoryId, preference.SubcategoryIds);
 
                         preference.CategoryId = newCategoryId;
                         preference.SubcategoryIds = newSubcategoryIds;
@@ -253,10 +243,10 @@ public class CategoryMigrationService : ICategoryMigrationService
                     if (NeedsMigration(preference.CategoryId, preference.SubcategoryIds))
                     {
                         var oldCategoryId = preference.CategoryId;
-                        var oldSubcategoryIds = preference.SubcategoryIds?.ToList() ?? new List<int>();
+                        var oldSubcategoryIds = preference.SubcategoryIds.ToList();
 
                         var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
-                            preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
+                            preference.CategoryId, preference.SubcategoryIds);
 
                         preference.CategoryId = newCategoryId;
                         preference.SubcategoryIds = newSubcategoryIds;
@@ -319,8 +309,8 @@ public class CategoryMigrationService : ICategoryMigrationService
         var newSubcategoryIds = new List<int>();
         int? newCategoryId = null;
 
-        // Handle null or empty subcategory list
-        if (legacySubcategoryIds == null || !legacySubcategoryIds.Any())
+        // Handle empty subcategory list
+        if (!legacySubcategoryIds.Any())
         {
             // Try category-only mapping
             if (legacyCategoryId.HasValue)
