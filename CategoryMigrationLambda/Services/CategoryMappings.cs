@@ -8,24 +8,20 @@ public static class CategoryMappings
     public static readonly IReadOnlyDictionary<(int? LegacyCategoryId, int? LegacySubcategoryId), (int? NewCategoryId, int? NewSubcategoryId)> CategoryMappingRulesByIds = new Dictionary<(int? LegacyCategoryId, int? LegacySubcategoryId), (int? NewCategoryId, int? NewSubcategoryId)>
     {
         // Category-only mappings (no subcategory) - ordered to match source of truth
-        { (1001, null), (1, null) }, // Consulting
         { (390, null), (2, null) }, // Customer Success -> Customer Success + Experience
         { (391, null), (3, null) }, // Cybersecurity + IT -> Cybersecurity
         { (147, null), (4, null) }, // Data + Analytics -> Data & Analytics
-        { (1005, null), (5, null) }, // AI & Machine Learning
         { (148, null), (6, null) }, // Design + UX -> Design
         { (149, null), (8, null) }, // Developer + Engineer -> Engineering
         { (146, null), (9, null) }, // Finance -> Finance
-        { (1010, null), (10, null) }, // Healthcare Services
         { (150, null), (11, null) }, // HR + Recruiting -> HR + Recruiting
         { (152, null), (12, null) }, // Legal -> Legal
-        { (1013, null), (13, null) }, // Manufacturing & Production
         { (153, null), (14, null) }, // Marketing -> Marketing
         { (154, null), (15, null) }, // Operations -> Operations + Support
         { (155, null), (16, null) }, // Product -> Product Management
         { (156, null), (17, null) }, // Project Mgmt -> Program and Project Management
-        { (1018, null), (18, null) }, // Research
         { (157, null), (19, null) }, // Sales -> Sales
+        { (158, null), (14, null) }, // Content -> Marketing
 
         // Null mappings for Management, Other, and Internships
         { (151, null), (null, null) }, // Internships -> null
