@@ -140,101 +140,54 @@ public class CategoryMigrationService : ICategoryMigrationService
 
         _logger.LogInformation("Starting scan with filter: CategoryId IS NOT NULL (identifies UserJobPreferences)");
 
-        // Scan all UserJobPreferences items - we'll filter by legacy category IDs in the processing loop
-        // This is more efficient than complex scan conditions
-
         var search = table.Scan(scanFilter);
-        var batch = new List<Document>();
+        await ProcessDocumentsInBatches(table, search, result, null, cancellationToken);
 
-        var pageCount = 0;
-        do
-        {
-            pageCount++;
-            var documents = await search.GetNextSetAsync(cancellationToken);
-            _logger.LogInformation("Page {PageNumber}: Retrieved {DocumentCount} documents", pageCount, documents.Count);
-            
-            foreach (var document in documents)
-            {
-                try
-                {
-                    var preference = _dynamoDbContext.FromDocument<UserJobPreferencesDto>(document);
-                    result.ProcessedCount++;
-
-                    if (NeedsMigration(preference.CategoryId, preference.SubcategoryIds))
-                    {
-                        var oldCategoryId = preference.CategoryId;
-                        var oldSubcategoryIds = preference.SubcategoryIds?.ToList() ?? new List<int>();
-
-                        var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
-                            preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
-
-                        if (!result.DryRun)
-                        {
-                            // Update the original document directly to preserve all fields
-                            document["CategoryId"] = newCategoryId;
-
-                            var subcategoryIdsList = new PrimitiveList(DynamoDBEntryType.Numeric);
-                            foreach (var id in newSubcategoryIds)
-                            {
-                                subcategoryIdsList.Add(new Primitive(id.ToString(), true));
-                            }
-                            document["SubcategoryIds"] = subcategoryIdsList;
-
-                            batch.Add(document);
-                        }
-
-                        result.MigratedCount++;
-
-                        _logger.LogInformation("Migrated preference {EntityId}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
-                            preference.EntityId, oldCategoryId, newCategoryId,
-                            string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
-
-                        if (batch.Count >= _batchSize)
-                        {
-                            await WriteBatch(table, batch, result, cancellationToken);
-                            batch.Clear();
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    result.ErrorCount++;
-                    var error = $"Error processing preference {document["EntityId"]}: {ex.Message}";
-                    result.Errors.Add(error);
-                    _logger.LogError(ex, error);
-                }
-            }
-        } while (!search.IsDone && !cancellationToken.IsCancellationRequested);
-
-        _logger.LogInformation("Scan completed. Total pages scanned: {PageCount}", pageCount);
+        _logger.LogInformation("Scan completed");
         _logger.LogInformation("Total documents processed: {ProcessedCount}, Migrations needed: {MigratedCount}",
             result.ProcessedCount, result.MigratedCount);
-
-        // Write remaining items in batch
-        if (batch.Any())
-        {
-            await WriteBatch(table, batch, result, cancellationToken);
-        }
     }
 
     private async Task ScanAndMigrateUserPreferences(string subjectId, UserMigrationResultDto result, CancellationToken cancellationToken)
     {
         var table = Table.LoadTable(_dynamoDbClient, _tableName);
         var queryFilter = new QueryFilter("PK", QueryOperator.Equal, $"SUBJECTID#{subjectId}");
-        // Note: CategoryId presence is checked after retrieving documents (QueryOperator doesn't support IsNotNull)
 
         _logger.LogInformation("Starting query for user {SubjectId} on table: {TableName}", subjectId, _tableName);
         _logger.LogInformation("Query filter: PK = SUBJECTID#{SubjectId} (will filter by CategoryId presence in-memory)", subjectId);
 
         var search = table.Query(queryFilter);
+        await ProcessDocumentsInBatches(table, search, result, subjectId, cancellationToken);
 
+        _logger.LogInformation("Query completed for user {SubjectId}", subjectId);
+        _logger.LogInformation("Total documents processed: {ProcessedCount}, Migrations needed: {MigratedCount}",
+            result.ProcessedCount, result.MigratedCount);
+    }
+
+    private async Task ProcessDocumentsInBatches(
+        Table table,
+        Search search,
+        MigrationResultDto result,
+        string? userContext,
+        CancellationToken cancellationToken)
+    {
+        var batch = new List<Document>();
         var pageCount = 0;
+
         do
         {
             pageCount++;
             var documents = await search.GetNextSetAsync(cancellationToken);
-            _logger.LogInformation("Page {PageNumber}: Retrieved {DocumentCount} documents for user {SubjectId}",
-                pageCount, documents.Count, subjectId);
+
+            if (userContext != null)
+            {
+                _logger.LogInformation("Page {PageNumber}: Retrieved {DocumentCount} documents for user {UserContext}",
+                    pageCount, documents.Count, userContext);
+            }
+            else
+            {
+                _logger.LogInformation("Page {PageNumber}: Retrieved {DocumentCount} documents", pageCount, documents.Count);
+            }
 
             foreach (var document in documents)
             {
@@ -259,39 +212,50 @@ public class CategoryMigrationService : ICategoryMigrationService
 
                         if (!result.DryRun)
                         {
-                            // Update the original document directly to preserve all fields
-                            document["CategoryId"] = newCategoryId;
-
-                            var subcategoryIdsList = new PrimitiveList(DynamoDBEntryType.Numeric);
-                            foreach (var id in newSubcategoryIds)
-                            {
-                                subcategoryIdsList.Add(new Primitive(id.ToString(), true));
-                            }
-                            document["SubcategoryIds"] = subcategoryIdsList;
-
-                            await table.PutItemAsync(document, cancellationToken);
+                            UpdateDocumentWithMigratedCategories(document, newCategoryId, newSubcategoryIds);
+                            batch.Add(document);
                         }
 
                         result.MigratedCount++;
 
-                        _logger.LogInformation("Migrated preference {EntityId} for user {SubjectId}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
-                            preference.EntityId, subjectId, oldCategoryId, newCategoryId,
-                            string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
+                        if (userContext != null)
+                        {
+                            _logger.LogInformation("Migrated preference {EntityId} for user {UserContext}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
+                                preference.EntityId, userContext, oldCategoryId, newCategoryId,
+                                string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
+                        }
+                        else
+                        {
+                            _logger.LogInformation("Migrated preference {EntityId}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
+                                preference.EntityId, oldCategoryId, newCategoryId,
+                                string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
+                        }
+
+                        if (batch.Count >= _batchSize)
+                        {
+                            await WriteBatch(table, batch, result, cancellationToken);
+                            batch.Clear();
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
                     result.ErrorCount++;
-                    var error = $"Error processing preference {document["EntityId"]} for user {subjectId}: {ex.Message}";
+                    var errorContext = userContext != null ? $" for user {userContext}" : "";
+                    var error = $"Error processing preference {document["EntityId"]}{errorContext}: {ex.Message}";
                     result.Errors.Add(error);
                     _logger.LogError(ex, error);
                 }
             }
         } while (!search.IsDone && !cancellationToken.IsCancellationRequested);
 
-        _logger.LogInformation("Query completed for user {SubjectId}. Total pages: {PageCount}", subjectId, pageCount);
-        _logger.LogInformation("Total documents processed: {ProcessedCount}, Migrations needed: {MigratedCount}",
-            result.ProcessedCount, result.MigratedCount);
+        _logger.LogInformation("Scan/Query completed. Total pages: {PageCount}", pageCount);
+
+        // Write remaining items in batch
+        if (batch.Any())
+        {
+            await WriteBatch(table, batch, result, cancellationToken);
+        }
     }
 
     private async Task WriteBatch(Table table, List<Document> batch, MigrationResultDto result, CancellationToken cancellationToken)
@@ -315,6 +279,19 @@ public class CategoryMigrationService : ICategoryMigrationService
             result.Errors.Add(error);
             _logger.LogError(ex, error);
         }
+    }
+
+    private void UpdateDocumentWithMigratedCategories(Document document, int? newCategoryId, List<int> newSubcategoryIds)
+    {
+        // Update the original document directly to preserve all fields
+        document["CategoryId"] = newCategoryId;
+
+        var subcategoryIdsList = new PrimitiveList(DynamoDBEntryType.Numeric);
+        foreach (var id in newSubcategoryIds)
+        {
+            subcategoryIdsList.Add(new Primitive(id.ToString(), true));
+        }
+        document["SubcategoryIds"] = subcategoryIdsList;
     }
 
     private (int? NewCategoryId, List<int> NewSubcategoryIds) MigrateCategoryAndSubcategories(
@@ -357,6 +334,16 @@ public class CategoryMigrationService : ICategoryMigrationService
                     {
                         newSubcategoryIds.Add(mapping.NewSubcategoryId.Value);
                     }
+                }
+            }
+
+            // If no subcategory mappings were found, fall back to category-only mapping
+            if (newCategoryId == null && legacyCategoryId.HasValue)
+            {
+                var categoryOnlyKey = (legacyCategoryId.Value, (int?)null);
+                if (CategoryMappings.CategoryMappingRulesByIds.TryGetValue(categoryOnlyKey, out var categoryOnlyMapping))
+                {
+                    newCategoryId = categoryOnlyMapping.NewCategoryId;
                 }
             }
         }
