@@ -207,28 +207,78 @@ public class CategoryMigrationService : ICategoryMigrationService
                         var oldCategoryId = preference.CategoryId;
                         var oldSubcategoryIds = preference.SubcategoryIds?.ToList() ?? new List<int>();
 
-                        var (newCategoryId, newSubcategoryIds) = MigrateCategoryAndSubcategories(
+                        var groupedMigrations = MigrateCategoryAndSubcategoriesGrouped(
                             preference.CategoryId, preference.SubcategoryIds ?? new List<int>());
+
+                        if (groupedMigrations.Count == 0)
+                        {
+                            _logger.LogWarning("No valid migration found for preference {EntityId} with CategoryId {CategoryId}",
+                                preference.EntityId, preference.CategoryId);
+                            continue;
+                        }
+
+                        // Get the first (primary) category - this will update the existing preference
+                        var primaryCategory = groupedMigrations.First();
+                        var primaryCategoryId = primaryCategory.Key;
+                        var primarySubcategoryIds = primaryCategory.Value;
 
                         if (!result.DryRun)
                         {
-                            UpdateDocumentWithMigratedCategories(document, newCategoryId, newSubcategoryIds);
+                            // Update the existing document with the primary category
+                            UpdateDocumentWithMigratedCategories(document, primaryCategoryId, primarySubcategoryIds);
                             batch.Add(document);
                         }
 
                         result.MigratedCount++;
 
+                        // Log the primary migration
                         if (userContext != null)
                         {
                             _logger.LogInformation("Migrated preference {EntityId} for user {UserContext}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
-                                preference.EntityId, userContext, oldCategoryId, newCategoryId,
-                                string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
+                                preference.EntityId, userContext, oldCategoryId, primaryCategoryId,
+                                string.Join(",", oldSubcategoryIds), string.Join(",", primarySubcategoryIds));
                         }
                         else
                         {
                             _logger.LogInformation("Migrated preference {EntityId}: CategoryId {OldCategoryId} -> {NewCategoryId}, SubcategoryIds [{OldSubcategoryIds}] -> [{NewSubcategoryIds}]",
-                                preference.EntityId, oldCategoryId, newCategoryId,
-                                string.Join(",", oldSubcategoryIds), string.Join(",", newSubcategoryIds));
+                                preference.EntityId, oldCategoryId, primaryCategoryId,
+                                string.Join(",", oldSubcategoryIds), string.Join(",", primarySubcategoryIds));
+                        }
+
+                        // Handle additional categories (create new preferences)
+                        if (groupedMigrations.Count > 1)
+                        {
+                            var additionalCategories = groupedMigrations.Skip(1);
+
+                            foreach (var additionalCategory in additionalCategories)
+                            {
+                                var newCategoryId = additionalCategory.Key;
+                                var newSubcategoryIds = additionalCategory.Value;
+
+                                if (!result.DryRun)
+                                {
+                                    // Create a new document (preference) for this additional category
+                                    var newDocument = CreateNewPreferenceDocument(document, newCategoryId, newSubcategoryIds);
+                                    batch.Add(newDocument);
+                                }
+
+                                result.MigratedCount++;
+
+                                // Log the new preference creation
+                                var newEntityId = !result.DryRun ? document["EntityId"].AsString() + "_split_" + newCategoryId : "(dry-run)";
+                                if (userContext != null)
+                                {
+                                    _logger.LogInformation("Created NEW preference {NewEntityId} for user {UserContext} from {OriginalEntityId}: CategoryId -> {NewCategoryId}, SubcategoryIds -> [{NewSubcategoryIds}]",
+                                        newEntityId, userContext, preference.EntityId, newCategoryId,
+                                        string.Join(",", newSubcategoryIds));
+                                }
+                                else
+                                {
+                                    _logger.LogInformation("Created NEW preference {NewEntityId} from {OriginalEntityId}: CategoryId -> {NewCategoryId}, SubcategoryIds -> [{NewSubcategoryIds}]",
+                                        newEntityId, preference.EntityId, newCategoryId,
+                                        string.Join(",", newSubcategoryIds));
+                                }
+                            }
                         }
 
                         if (batch.Count >= _batchSize)
@@ -281,6 +331,63 @@ public class CategoryMigrationService : ICategoryMigrationService
         }
     }
 
+    private Document CreateNewPreferenceDocument(Document originalDocument, int? newCategoryId, List<int> newSubcategoryIds)
+    {
+        // Clone the original document to preserve all fields
+        var newDocument = new Document();
+
+        foreach (var key in originalDocument.Keys)
+        {
+            newDocument[key] = originalDocument[key];
+        }
+
+        // Generate a new unique EntityId
+        var originalEntityId = originalDocument["EntityId"].AsString();
+        var newEntityId = Guid.NewGuid().ToString();
+        newDocument["EntityId"] = newEntityId;
+
+        // Update SK to reflect the new EntityId
+        // SK format: ENTITYID#{EntityId}
+        if (originalDocument.ContainsKey("SK"))
+        {
+            var originalSK = originalDocument["SK"].AsString();
+            // Replace the old EntityId in SK with the new one
+            newDocument["SK"] = originalSK.Replace(originalEntityId, newEntityId);
+        }
+
+        // Update timestamps
+        var now = DateTime.UtcNow;
+        var timestamp = now.ToString("o");
+
+        // Update Gsi1SK to reflect the new EntityId and timestamp
+        // Gsi1SK format: TIMESTAMP#{timestamp}#ENTITYID#{EntityId}
+        if (originalDocument.ContainsKey("Gsi1SK"))
+        {
+            newDocument["Gsi1SK"] = $"TIMESTAMP#{timestamp}#ENTITYID#{newEntityId}";
+        }
+
+        // Update the migrated category and subcategories
+        newDocument["CategoryId"] = newCategoryId;
+
+        var subcategoryIdsList = new PrimitiveList(DynamoDBEntryType.Numeric);
+        foreach (var id in newSubcategoryIds)
+        {
+            subcategoryIdsList.Add(new Primitive(id.ToString(), true));
+        }
+        newDocument["SubcategoryIds"] = subcategoryIdsList;
+
+        // New split preferences should not be primary
+        if (originalDocument.ContainsKey("IsPrimary"))
+        {
+            newDocument["IsPrimary"] = false;
+        }
+
+        newDocument["CreatedAt"] = timestamp;
+        newDocument["UpdatedAt"] = timestamp;
+
+        return newDocument;
+    }
+
     private void UpdateDocumentWithMigratedCategories(Document document, int? newCategoryId, List<int> newSubcategoryIds)
     {
         // Update the original document directly to preserve all fields
@@ -292,14 +399,16 @@ public class CategoryMigrationService : ICategoryMigrationService
             subcategoryIdsList.Add(new Primitive(id.ToString(), true));
         }
         document["SubcategoryIds"] = subcategoryIdsList;
+
+        // Update the timestamp
+        document["UpdatedAt"] = DateTime.UtcNow.ToString("o");
     }
 
-    private (int? NewCategoryId, List<int> NewSubcategoryIds) MigrateCategoryAndSubcategories(
+    private Dictionary<int?, List<int>> MigrateCategoryAndSubcategoriesGrouped(
         int? legacyCategoryId,
         List<int>? legacySubcategoryIds)
     {
-        var newSubcategoryIds = new List<int>();
-        int? newCategoryId = null;
+        var result = new Dictionary<int?, List<int>>();
 
         // Handle null or empty subcategory list
         if (legacySubcategoryIds == null || !legacySubcategoryIds.Any())
@@ -310,47 +419,73 @@ public class CategoryMigrationService : ICategoryMigrationService
                 var categoryOnlyKey = (legacyCategoryId.Value, (int?)null);
                 if (CategoryMappings.CategoryMappingRulesByIds.TryGetValue(categoryOnlyKey, out var categoryOnlyMapping))
                 {
-                    newCategoryId = categoryOnlyMapping.NewCategoryId;
+                    if (!result.ContainsKey(categoryOnlyMapping.NewCategoryId))
+                    {
+                        result[categoryOnlyMapping.NewCategoryId] = new List<int>();
+                    }
                 }
             }
         }
         else
         {
-            // Process each subcategory
+            // Process each subcategory and group by new category ID
             foreach (var legacySubcategoryId in legacySubcategoryIds)
             {
                 var mappingKey = (legacyCategoryId, legacySubcategoryId);
 
                 if (CategoryMappings.CategoryMappingRulesByIds.TryGetValue(mappingKey, out var mapping))
                 {
-                    // Set the new category ID (should be consistent across all subcategories)
-                    if (newCategoryId == null)
+                    // Skip null mappings
+                    if (!mapping.NewCategoryId.HasValue)
                     {
-                        newCategoryId = mapping.NewCategoryId;
+                        continue;
+                    }
+
+                    // Initialize list for this category if not exists
+                    if (!result.ContainsKey(mapping.NewCategoryId))
+                    {
+                        result[mapping.NewCategoryId] = new List<int>();
                     }
 
                     // Add the new subcategory ID if it exists
                     if (mapping.NewSubcategoryId.HasValue)
                     {
-                        newSubcategoryIds.Add(mapping.NewSubcategoryId.Value);
+                        result[mapping.NewCategoryId].Add(mapping.NewSubcategoryId.Value);
                     }
                 }
             }
 
             // If no subcategory mappings were found, fall back to category-only mapping
-            if (newCategoryId == null && legacyCategoryId.HasValue)
+            if (!result.Any() && legacyCategoryId.HasValue)
             {
                 var categoryOnlyKey = (legacyCategoryId.Value, (int?)null);
                 if (CategoryMappings.CategoryMappingRulesByIds.TryGetValue(categoryOnlyKey, out var categoryOnlyMapping))
                 {
-                    newCategoryId = categoryOnlyMapping.NewCategoryId;
+                    if (categoryOnlyMapping.NewCategoryId.HasValue)
+                    {
+                        result[categoryOnlyMapping.NewCategoryId] = new List<int>();
+                    }
                 }
             }
         }
 
-        // Remove duplicates and sort
-        newSubcategoryIds = newSubcategoryIds.Distinct().OrderBy(x => x).ToList();
+        // Remove duplicates and sort subcategories for each category
+        foreach (var categoryId in result.Keys.ToList())
+        {
+            result[categoryId] = result[categoryId].Distinct().OrderBy(x => x).ToList();
+        }
 
-        return (newCategoryId, newSubcategoryIds);
+        return result;
+    }
+
+    private (int? NewCategoryId, List<int> NewSubcategoryIds) MigrateCategoryAndSubcategories(
+        int? legacyCategoryId,
+        List<int>? legacySubcategoryIds)
+    {
+        var grouped = MigrateCategoryAndSubcategoriesGrouped(legacyCategoryId, legacySubcategoryIds);
+
+        // Return the first (primary) category mapping for backward compatibility
+        var firstEntry = grouped.FirstOrDefault();
+        return (firstEntry.Key, firstEntry.Value ?? new List<int>());
     }
 }
