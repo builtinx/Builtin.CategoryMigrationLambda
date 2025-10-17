@@ -29,7 +29,6 @@ public static class CategoryMappings
         // Data + Analytics mappings (4, 5)
         { (147, 508), (4, 38) }, // Data + Analytics, Analytics -> Data & Analytics, Reporting & Insights
         { (147, 509), (4, 38) }, // Data + Analytics, Analysis & Reporting -> Data & Analytics, Reporting & Insights
-        { (147, 201), (4, 36) }, // Data + Analytics, Business Intelligence -> Data & Analytics, Business Intelligence (BI)
         { (147, 510), (4, 36) }, // Data + Analytics, Business Intelligence -> Data & Analytics, Business Intelligence (BI)
         { (147, 511), (4, 35) }, // Data + Analytics, Data Engineering -> Data & Analytics, Data Engineering
         { (147, 512), (5, 42) }, // Data + Analytics, Data Science -> AI & Machine Learning, Data Science
@@ -68,15 +67,11 @@ public static class CategoryMappings
         { (154, 543), (15, 106) }, // Operations, Operations Management -> Operations + Support, Strategic Operations
 
         // Sales mappings (19)
-        { (157, 454), (19, 121) }, // Sales, Account Development -> Sales, Account Executive
-        { (157, 455), (19, 122) }, // Sales, Account Management -> Sales, Account Management
-        { (157, 465), (19, 123) }, // Sales, Sales Management -> Sales, Leadership
-        { (157, 466), (19, 124) }, // Sales, Sales Operations -> Sales, Sales Operations
-        { (157, 462), (19, 125) }, // Sales, Inside Sales -> Sales, Sales Development
-        { (157, 535), (19, 126) }, // Sales, Sales Engineer -> Sales, Sales Engineer
-
-        // Add more mappings as needed...
-        // Note: This is a subset of the full mappings for brevity
-        // In production, include all mappings from the FilterService
+        { (157, 584), (19, 121) }, // Sales, Account Development -> Sales, Account Executive
+        { (157, 585), (19, 122) }, // Sales, Account Management -> Sales, Account Management
+        { (157, 587), (19, 123) }, // Sales, Sales Management -> Sales, Leadership
+        { (157, 588), (19, 124) }, // Sales, Sales Operations -> Sales, Sales Operations
+        { (157, 589), (19, 125) }, // Sales, Sales Development -> Sales, Sales Development
+        { (157, 590), (19, 126) }, // Sales, Sales Engineer -> Sales, Sales Engineer
     };
 }
