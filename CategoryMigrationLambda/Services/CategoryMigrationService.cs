@@ -382,10 +382,35 @@ public class CategoryMigrationService : ICategoryMigrationService
         }
         newDocument["SubcategoryIds"] = subcategoryIdsList;
 
-        // New split preferences should not be primary
-        if (originalDocument.ContainsKey("IsPrimary"))
+        // Ensure required list fields exist (they are non-nullable in the UserJobPreferences model)
+        if (!newDocument.ContainsKey("IndustryIds"))
         {
-            newDocument["IsPrimary"] = false;
+            newDocument["IndustryIds"] = new PrimitiveList(DynamoDBEntryType.Numeric);
+        }
+
+        if (!newDocument.ContainsKey("Technologies"))
+        {
+            newDocument["Technologies"] = new PrimitiveList(DynamoDBEntryType.String);
+        }
+
+        if (!newDocument.ContainsKey("CompanySizes"))
+        {
+            newDocument["CompanySizes"] = new PrimitiveList(DynamoDBEntryType.String);
+        }
+
+        if (!newDocument.ContainsKey("WorkingEnvironments"))
+        {
+            newDocument["WorkingEnvironments"] = new PrimitiveList(DynamoDBEntryType.String);
+        }
+
+        // New split preferences should not be primary
+        // IsPrimary is a non-nullable bool in the model, so it must always be set
+        newDocument["IsPrimary"] = false;
+
+        // Ensure UserModified is set (non-nullable bool in the model)
+        if (!newDocument.ContainsKey("UserModified"))
+        {
+            newDocument["UserModified"] = false;
         }
 
         newDocument["CreatedAt"] = timestamp;
