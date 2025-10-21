@@ -255,17 +255,23 @@ public class CategoryMigrationService : ICategoryMigrationService
                                 var newCategoryId = additionalCategory.Key;
                                 var newSubcategoryIds = additionalCategory.Value;
 
+                                string newEntityId;
                                 if (!result.DryRun)
                                 {
                                     // Create a new document (preference) for this additional category
                                     var newDocument = CreateNewPreferenceDocument(document, newCategoryId, newSubcategoryIds);
                                     batch.Add(newDocument);
+                                    // Extract the actual EntityId that was generated
+                                    newEntityId = newDocument["EntityId"].AsString();
+                                }
+                                else
+                                {
+                                    newEntityId = "(dry-run)";
                                 }
 
                                 result.MigratedCount++;
 
                                 // Log the new preference creation
-                                var newEntityId = !result.DryRun ? document["EntityId"].AsString() + "_split_" + newCategoryId : "(dry-run)";
                                 if (userContext != null)
                                 {
                                     _logger.LogInformation("Created NEW preference {NewEntityId} for user {UserContext} from {OriginalEntityId}: CategoryId -> {NewCategoryId}, SubcategoryIds -> [{NewSubcategoryIds}]",
