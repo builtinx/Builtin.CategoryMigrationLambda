@@ -410,7 +410,7 @@ public class CategoryMigrationService : ICategoryMigrationService
         // Ensure UserModified is set (non-nullable bool in the model)
         if (!newDocument.ContainsKey("UserModified"))
         {
-            newDocument["UserModified"] = true;
+            newDocument["UserModified"] = false;
         }
 
         newDocument["CreatedAt"] = timestamp;
