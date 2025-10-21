@@ -382,26 +382,12 @@ public class CategoryMigrationService : ICategoryMigrationService
         }
         newDocument["SubcategoryIds"] = subcategoryIdsList;
 
+        // Clean up invalid enum list fields (SS with empty strings causes deserialization errors)
+        // DynamoDB String Sets cannot contain empty strings
+        CleanupInvalidStringSetFields(newDocument);
+
         // Ensure required list fields exist (they are non-nullable in the UserJobPreferences model)
-        if (!newDocument.ContainsKey("IndustryIds"))
-        {
-            newDocument["IndustryIds"] = new PrimitiveList(DynamoDBEntryType.Numeric);
-        }
-
-        if (!newDocument.ContainsKey("Technologies"))
-        {
-            newDocument["Technologies"] = new PrimitiveList(DynamoDBEntryType.String);
-        }
-
-        if (!newDocument.ContainsKey("CompanySizes"))
-        {
-            newDocument["CompanySizes"] = new PrimitiveList(DynamoDBEntryType.String);
-        }
-
-        if (!newDocument.ContainsKey("WorkingEnvironments"))
-        {
-            newDocument["WorkingEnvironments"] = new PrimitiveList(DynamoDBEntryType.String);
-        }
+        EnsureRequiredListFields(newDocument);
 
         // New split preferences should not be primary
         // IsPrimary is a non-nullable bool in the model, so it must always be set
@@ -419,6 +405,52 @@ public class CategoryMigrationService : ICategoryMigrationService
         return newDocument;
     }
 
+    private void CleanupInvalidStringSetFields(Document document)
+    {
+        // These enum fields can have SS with empty strings which is invalid in DynamoDB
+        // Remove them if they contain only empty strings
+        var enumFields = new[] { "CompanySizes", "WorkingEnvironments", "ExperienceBucket", "ExperienceLevels" };
+
+        foreach (var fieldName in enumFields)
+        {
+            if (document.ContainsKey(fieldName))
+            {
+                var field = document[fieldName];
+                if (field is PrimitiveList primitiveList)
+                {
+                    // Check if the list contains only empty strings
+                    var hasOnlyEmptyStrings = primitiveList.Entries.All(e =>
+                        e is Primitive primitive && string.IsNullOrEmpty(primitive.AsString()));
+
+                    if (hasOnlyEmptyStrings)
+                    {
+                        // Remove the field entirely rather than keeping invalid SS
+                        document.Remove(fieldName);
+                    }
+                }
+            }
+        }
+    }
+
+    private void EnsureRequiredListFields(Document document)
+    {
+        // Ensure IndustryIds exists (non-nullable in model)
+        if (!document.ContainsKey("IndustryIds"))
+        {
+            document["IndustryIds"] = new PrimitiveList(DynamoDBEntryType.Numeric);
+        }
+
+        // Ensure Technologies exists (non-nullable in model)
+        if (!document.ContainsKey("Technologies"))
+        {
+            document["Technologies"] = new PrimitiveList(DynamoDBEntryType.String);
+        }
+
+        // Note: CompanySizes and WorkingEnvironments are initialized as empty lists in the model
+        // but they can be missing/null in DynamoDB. We don't force-create them here to avoid
+        // creating invalid SS fields. They'll be handled by CleanupInvalidStringSetFields.
+    }
+
     private void UpdateDocumentWithMigratedCategories(Document document, int? newCategoryId, List<int> newSubcategoryIds)
     {
         // Update the original document directly to preserve all fields
@@ -430,6 +462,9 @@ public class CategoryMigrationService : ICategoryMigrationService
             subcategoryIdsList.Add(new Primitive(id.ToString(), true));
         }
         document["SubcategoryIds"] = subcategoryIdsList;
+
+        // Clean up invalid enum list fields (SS with empty strings causes deserialization errors)
+        CleanupInvalidStringSetFields(document);
 
         // Update the timestamp
         document["UpdatedAt"] = DateTime.UtcNow.ToString("o");
