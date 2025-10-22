@@ -375,7 +375,8 @@ public class CategoryMigrationService : ICategoryMigrationService
         // Update the migrated category and subcategories
         newDocument["CategoryId"] = newCategoryId;
 
-        var subcategoryIdsList = new PrimitiveList(DynamoDBEntryType.Numeric);
+        // Create a proper List type for SubcategoryIds (not Number Set)
+        var subcategoryIdsList = new DynamoDBList();
         foreach (var id in newSubcategoryIds)
         {
             subcategoryIdsList.Add(new Primitive(id.ToString(), true));
@@ -391,12 +392,20 @@ public class CategoryMigrationService : ICategoryMigrationService
 
         // New split preferences should not be primary
         // IsPrimary is a non-nullable bool in the model, so it must always be set
-        newDocument["IsPrimary"] = false;
+        // Use DynamoDBBool to ensure it's stored as BOOL type, not Number
+        newDocument["IsPrimary"] = new DynamoDBBool(false);
 
         // Ensure UserModified is set (non-nullable bool in the model)
+        // Preserve the original value if it exists, otherwise default to false
         if (!newDocument.ContainsKey("UserModified"))
         {
-            newDocument["UserModified"] = false;
+            newDocument["UserModified"] = new DynamoDBBool(false);
+        }
+        else if (!(newDocument["UserModified"] is DynamoDBBool))
+        {
+            // If UserModified exists but is not a DynamoDBBool, convert it
+            var userModifiedValue = newDocument["UserModified"].AsBoolean();
+            newDocument["UserModified"] = new DynamoDBBool(userModifiedValue);
         }
 
         newDocument["CreatedAt"] = timestamp;
@@ -437,13 +446,13 @@ public class CategoryMigrationService : ICategoryMigrationService
         // Ensure IndustryIds exists (non-nullable in model)
         if (!document.ContainsKey("IndustryIds"))
         {
-            document["IndustryIds"] = new PrimitiveList(DynamoDBEntryType.Numeric);
+            document["IndustryIds"] = new DynamoDBList();
         }
 
         // Ensure Technologies exists (non-nullable in model)
         if (!document.ContainsKey("Technologies"))
         {
-            document["Technologies"] = new PrimitiveList(DynamoDBEntryType.String);
+            document["Technologies"] = new DynamoDBList();
         }
 
         // Note: CompanySizes and WorkingEnvironments are initialized as empty lists in the model
@@ -456,7 +465,8 @@ public class CategoryMigrationService : ICategoryMigrationService
         // Update the original document directly to preserve all fields
         document["CategoryId"] = newCategoryId;
 
-        var subcategoryIdsList = new PrimitiveList(DynamoDBEntryType.Numeric);
+        // Create a proper List type for SubcategoryIds (not Number Set)
+        var subcategoryIdsList = new DynamoDBList();
         foreach (var id in newSubcategoryIds)
         {
             subcategoryIdsList.Add(new Primitive(id.ToString(), true));
