@@ -46,6 +46,54 @@ public class UserJobPreferencesDto
     [DynamoDBProperty]
     public Dictionary<string, object>? AdditionalProperties { get; set; }
 
+    [DynamoDBProperty]
+    public bool IsPrimary { get; set; }
+
+    [DynamoDBProperty]
+    public bool UserModified { get; set; }
+
+    [DynamoDBProperty]
+    public string? JobTitle { get; set; }
+
+    [DynamoDBProperty]
+    public string? Frequency { get; set; }
+
+    [DynamoDBProperty]
+    public string? City { get; set; }
+
+    [DynamoDBProperty]
+    public string? State { get; set; }
+
+    [DynamoDBProperty]
+    public string? Country { get; set; }
+
+    [DynamoDBProperty]
+    public string? GeoName { get; set; }
+
+    [DynamoDBProperty]
+    public double? Latitude { get; set; }
+
+    [DynamoDBProperty]
+    public double? Longitude { get; set; }
+
+    [DynamoDBProperty]
+    public List<int>? IndustryIds { get; set; }
+
+    [DynamoDBProperty]
+    public List<string>? Technologies { get; set; }
+
+    [DynamoDBProperty]
+    public string? Gsi1PK { get; set; }
+
+    [DynamoDBProperty]
+    public string? Gsi1SK { get; set; }
+
+    [DynamoDBProperty]
+    public string? Gsi2PK { get; set; }
+
+    [DynamoDBProperty]
+    public string? Gsi2SK { get; set; }
+
     // Allow for any additional properties that might exist in the DynamoDB document
     // This ensures we don't lose any data during migration
     [DynamoDBIgnore]
