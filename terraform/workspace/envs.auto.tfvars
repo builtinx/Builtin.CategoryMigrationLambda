@@ -5,6 +5,7 @@ lambda_log_level = {
   develop    = "Information"
   staging    = "Information"
   production = "Warning"
+  prod       = "Warning"
 }
 
 schedule_expression = {
@@ -12,6 +13,7 @@ schedule_expression = {
   develop    = null
   staging    = null
   production = null
+  prod       = null
 }
 
 log_retention_days = {
@@ -19,4 +21,5 @@ log_retention_days = {
   develop    = 7
   staging    = 14
   production = 30
+  prod       = 30
 }
