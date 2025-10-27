@@ -133,12 +133,20 @@ public class CategoryMigrationService : ICategoryMigrationService
         _logger.LogInformation("Starting scan of table: {TableName}", _tableName);
         _logger.LogInformation("AWS Region: {Region}", _dynamoDbClient.Config.RegionEndpoint?.SystemName ?? "Not set");
 
-        // Note: The Type attribute is not reliably present in DynamoDB (getter-only property issue)
-        // Instead, we identify UserJobPreferences by the presence of CategoryId attribute
-        var scanFilter = new ScanFilter();
-        scanFilter.AddCondition("CategoryId", ScanOperator.IsNotNull);
+        // New category IDs are in the range 1-19
+        // Legacy category IDs are outside this range (146-157, 390-391, 1001-1018, etc.)
+        // We want to scan ONLY for legacy categories that need migration
+        const int newCategoryMin = 1;
+        const int newCategoryMax = 19;
 
-        _logger.LogInformation("Starting scan with filter: CategoryId IS NOT NULL (identifies UserJobPreferences)");
+        var scanFilter = new ScanFilter();
+        // Add OR conditions to find legacy categories that need migration
+        // This filters at the DynamoDB level, so we only fetch records that need migration
+        scanFilter.AddCondition("CategoryId", ScanOperator.LessThan, newCategoryMin);
+        scanFilter.AddCondition("CategoryId", ScanOperator.GreaterThan, newCategoryMax);
+
+        _logger.LogInformation("Starting scan with filter: CategoryId < {Min} OR CategoryId > {Max} (legacy categories only)",
+            newCategoryMin, newCategoryMax);
 
         var search = table.Scan(scanFilter);
         await ProcessDocumentsInBatches(table, search, result, null, cancellationToken);
