@@ -63,7 +63,7 @@ echo ""
 echo "🔄 Importing existing resources into terraform state..."
 
 # Import CloudWatch Log Group
-if [ "$LOG_GROUP_EXISTS" = true ]; then
+if [[ "$LOG_GROUP_EXISTS" = true ]]; then
     echo "Importing CloudWatch Log Group..."
     if terraform import "module.category_migration_lambda.aws_cloudwatch_log_group.logs" "$LOG_GROUP_NAME" 2>/dev/null; then
         echo "✅ Successfully imported CloudWatch Log Group"
@@ -73,7 +73,7 @@ if [ "$LOG_GROUP_EXISTS" = true ]; then
 fi
 
 # Import IAM Role
-if [ "$IAM_ROLE_EXISTS" = true ]; then
+if [[ "$IAM_ROLE_EXISTS" = true ]]; then
     echo "Importing IAM Role..."
     if terraform import "module.category_migration_lambda.aws_iam_role.lambda_role" "$IAM_ROLE_NAME" 2>/dev/null; then
         echo "✅ Successfully imported IAM Role"
@@ -92,7 +92,7 @@ if [ "$IAM_ROLE_EXISTS" = true ]; then
 fi
 
 # Import Lambda Function
-if [ "$LAMBDA_EXISTS" = true ]; then
+if [[ "$LAMBDA_EXISTS" = true ]]; then
     echo "Importing Lambda Function..."
     if terraform import "module.category_migration_lambda.aws_lambda_function.this" "$LAMBDA_FUNCTION_NAME" 2>/dev/null; then
         echo "✅ Successfully imported Lambda Function"

@@ -39,7 +39,7 @@ public class Function
     /// <summary>
     /// Collection of services for DI.
     /// </summary>
-    private static ServiceProvider? _serviceProvider;
+    private ServiceProvider? _serviceProvider;
 
     public Function()
     {

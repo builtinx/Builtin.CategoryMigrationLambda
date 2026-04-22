@@ -41,7 +41,7 @@ dotnet lambda package --configuration Release --framework net8.0
 
 # Get the package file
 PACKAGE_FILE=$(find . -name "*.zip" -type f | head -1)
-if [ -z "$PACKAGE_FILE" ]; then
+if [[ -z "$PACKAGE_FILE" ]]; then
     echo "❌ Failed to create Lambda package"
     exit 1
 fi
@@ -52,7 +52,7 @@ echo "✅ Lambda package created: $PACKAGE_FILE"
 echo "🔐 Creating IAM role..."
 ROLE_ARN=$(aws iam get-role --role-name $ROLE_NAME --query 'Role.Arn' --output text 2>/dev/null || echo "")
 
-if [ -z "$ROLE_ARN" ]; then
+if [[ -z "$ROLE_ARN" ]]; then
     echo "Creating IAM role: $ROLE_NAME"
     
     # Create trust policy
@@ -122,7 +122,7 @@ echo "✅ IAM role ready: $ROLE_ARN"
 echo "🚀 Deploying Lambda function..."
 FUNCTION_EXISTS=$(aws lambda get-function --function-name $FUNCTION_NAME --query 'Configuration.FunctionName' --output text 2>/dev/null || echo "")
 
-if [ -z "$FUNCTION_EXISTS" ]; then
+if [[ -z "$FUNCTION_EXISTS" ]]; then
     echo "Creating new Lambda function..."
     aws lambda create-function \
         --function-name $FUNCTION_NAME \
