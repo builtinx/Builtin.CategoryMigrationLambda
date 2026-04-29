@@ -359,7 +359,8 @@ public class CategoryMigrationService : ICategoryMigrationService
     {
         result.ErrorCount++;
         var errorContext = userContext != null ? $" for user {userContext}" : "";
-        var error = $"Error processing preference {document[EntityIdField]}{errorContext}: {ex.Message}";
+        var entityId = document.ContainsKey(EntityIdField) ? document[EntityIdField].AsString() : "(unknown)";
+        var error = $"Error processing preference {entityId}{errorContext}: {ex.Message}";
         result.Errors.Add(error);
         _logger.LogError(ex, error);
     }
