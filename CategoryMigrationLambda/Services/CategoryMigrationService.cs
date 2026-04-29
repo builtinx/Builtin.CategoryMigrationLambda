@@ -1,6 +1,7 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.DocumentModel;
+using Amazon.DynamoDBv2.Model;
 using CategoryMigrationLambda.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -131,28 +132,32 @@ public class CategoryMigrationService : ICategoryMigrationService
 
     private async Task ScanAndMigrateAllPreferences(MigrationResultDto result, CancellationToken cancellationToken)
     {
-        var table = Table.LoadTable(_dynamoDbClient, _tableName);
-
         _logger.LogInformation("Starting scan of table: {TableName}", _tableName);
         _logger.LogInformation("AWS Region: {Region}", _dynamoDbClient.Config.RegionEndpoint?.SystemName ?? "Not set");
 
         // New category IDs are in the range 1-19
         // Legacy category IDs are outside this range (146-157, 390-391, 1001-1018, etc.)
-        // We want to scan ONLY for legacy categories that need migration
         const int newCategoryMin = 1;
         const int newCategoryMax = 19;
-
-        var scanFilter = new ScanFilter();
-        // Add OR conditions to find legacy categories that need migration
-        // This filters at the DynamoDB level, so we only fetch records that need migration
-        scanFilter.AddCondition(CategoryIdField, ScanOperator.LessThan, newCategoryMin);
-        scanFilter.AddCondition(CategoryIdField, ScanOperator.GreaterThan, newCategoryMax);
 
         _logger.LogInformation("Starting scan with filter: CategoryId < {Min} OR CategoryId > {Max} (legacy categories only)",
             newCategoryMin, newCategoryMax);
 
-        var search = table.Scan(scanFilter);
-        await ProcessDocumentsInBatches(table, search, result, null, cancellationToken);
+        // Use the low-level ScanAsync with a FilterExpression so the OR condition is
+        // evaluated correctly by DynamoDB (the DocumentModel ScanFilter only supports AND).
+        var scanRequest = new ScanRequest
+        {
+            TableName = _tableName,
+            FilterExpression = $"{CategoryIdField} < :min OR {CategoryIdField} > :max",
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":min"] = new AttributeValue { N = newCategoryMin.ToString() },
+                [":max"] = new AttributeValue { N = newCategoryMax.ToString() }
+            }
+        };
+
+        var table = Table.LoadTable(_dynamoDbClient, _tableName);
+        await ProcessDocumentsFromRawScan(table, scanRequest, result, null, cancellationToken);
 
         _logger.LogInformation("Scan completed");
         _logger.LogInformation("Total documents processed: {ProcessedCount}, Migrations needed: {MigratedCount}",
@@ -213,6 +218,52 @@ public class CategoryMigrationService : ICategoryMigrationService
         _logger.LogInformation("Scan/Query completed. Total pages: {PageCount}", pageCount);
 
         // Write remaining items in batch
+        if (batch.Any())
+        {
+            await WriteBatch(table, batch, result, cancellationToken);
+        }
+    }
+
+    private async Task ProcessDocumentsFromRawScan(
+        Table table,
+        ScanRequest scanRequest,
+        MigrationResultDto result,
+        string? userContext,
+        CancellationToken cancellationToken)
+    {
+        var batch = new List<Document>();
+        var pageCount = 0;
+
+        do
+        {
+            pageCount++;
+            var response = await _dynamoDbClient.ScanAsync(scanRequest, cancellationToken);
+            var documents = response.Items.Select(Document.FromAttributeMap).ToList();
+            LogPageRetrieved(pageCount, documents.Count, userContext);
+
+            foreach (var document in documents)
+            {
+                try
+                {
+                    ProcessSingleDocument(document, result, batch, userContext);
+
+                    if (batch.Count >= _batchSize)
+                    {
+                        await WriteBatch(table, batch, result, cancellationToken);
+                        batch.Clear();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    HandleDocumentProcessingError(document, result, userContext, ex);
+                }
+            }
+
+            scanRequest.ExclusiveStartKey = response.LastEvaluatedKey;
+        } while (scanRequest.ExclusiveStartKey?.Count > 0 && !cancellationToken.IsCancellationRequested);
+
+        _logger.LogInformation("Scan/Query completed. Total pages: {PageCount}", pageCount);
+
         if (batch.Any())
         {
             await WriteBatch(table, batch, result, cancellationToken);
@@ -359,7 +410,15 @@ public class CategoryMigrationService : ICategoryMigrationService
     {
         result.ErrorCount++;
         var errorContext = userContext != null ? $" for user {userContext}" : "";
-        var entityId = document.ContainsKey(EntityIdField) ? document[EntityIdField].AsString() : "(unknown)";
+        string entityId;
+        try
+        {
+            entityId = document.ContainsKey(EntityIdField) ? document[EntityIdField]?.AsString() ?? "(unknown)" : "(unknown)";
+        }
+        catch
+        {
+            entityId = "(invalid)";
+        }
         var error = $"Error processing preference {entityId}{errorContext}: {ex.Message}";
         result.Errors.Add(error);
         _logger.LogError(ex, error);
@@ -562,7 +621,7 @@ public class CategoryMigrationService : ICategoryMigrationService
         return result;
     }
 
-    private void ApplyCategoryOnlyMapping(int? legacyCategoryId, Dictionary<int?, List<int>> result, bool requireNewCategoryId)
+    private static void ApplyCategoryOnlyMapping(int? legacyCategoryId, Dictionary<int?, List<int>> result, bool requireNewCategoryId)
     {
         if (!legacyCategoryId.HasValue)
             return;
