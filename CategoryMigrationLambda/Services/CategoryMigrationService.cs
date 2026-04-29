@@ -204,8 +204,8 @@ public class CategoryMigrationService : ICategoryMigrationService
 
                     if (batch.Count >= _batchSize)
                     {
-                        await WriteBatch(table, batch, result, cancellationToken);
-                        batch.Clear();
+                        if (await WriteBatch(table, batch, result, cancellationToken))
+                            batch.Clear();
                     }
                 }
                 catch (Exception ex)
@@ -249,8 +249,8 @@ public class CategoryMigrationService : ICategoryMigrationService
 
                     if (batch.Count >= _batchSize)
                     {
-                        await WriteBatch(table, batch, result, cancellationToken);
-                        batch.Clear();
+                        if (await WriteBatch(table, batch, result, cancellationToken))
+                            batch.Clear();
                     }
                 }
                 catch (Exception ex)
@@ -424,7 +424,7 @@ public class CategoryMigrationService : ICategoryMigrationService
         _logger.LogError(ex, error);
     }
 
-    private async Task WriteBatch(Table table, List<Document> batch, MigrationResultDto result, CancellationToken cancellationToken)
+    private async Task<bool> WriteBatch(Table table, List<Document> batch, MigrationResultDto result, CancellationToken cancellationToken)
     {
         try
         {
@@ -437,6 +437,7 @@ public class CategoryMigrationService : ICategoryMigrationService
 
             await batchWrite.ExecuteAsync(cancellationToken);
             _logger.LogInformation("Successfully wrote batch of {Count} items", batch.Count);
+            return true;
         }
         catch (Exception ex)
         {
@@ -444,6 +445,7 @@ public class CategoryMigrationService : ICategoryMigrationService
             var error = $"Error writing batch of {batch.Count} items: {ex.Message}";
             result.Errors.Add(error);
             _logger.LogError(ex, error);
+            return false;
         }
     }
 
