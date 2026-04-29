@@ -38,7 +38,7 @@ dotnet lambda package --configuration Release --framework net8.0 --output-packag
 
 # Get the package file
 PACKAGE_FILE="../$PACKAGE_NAME"
-if [ ! -f "$PACKAGE_FILE" ]; then
+if [[ ! -f "$PACKAGE_FILE" ]]; then
     echo "❌ Failed to create Lambda package"
     exit 1
 fi
