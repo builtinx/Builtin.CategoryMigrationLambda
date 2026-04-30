@@ -220,7 +220,8 @@ public class CategoryMigrationService : ICategoryMigrationService
         // Write remaining items in batch
         if (batch.Any())
         {
-            await WriteBatch(table, batch, result, cancellationToken);
+            if (!await WriteBatch(table, batch, result, cancellationToken))
+                result.MigratedCount -= batch.Count;
         }
     }
 
@@ -266,7 +267,8 @@ public class CategoryMigrationService : ICategoryMigrationService
 
         if (batch.Any())
         {
-            await WriteBatch(table, batch, result, cancellationToken);
+            if (!await WriteBatch(table, batch, result, cancellationToken))
+                result.MigratedCount -= batch.Count;
         }
     }
 
