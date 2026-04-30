@@ -189,6 +189,7 @@ public class CategoryMigrationService : ICategoryMigrationService
     {
         var batch = new List<Document>();
         var pageCount = 0;
+        var writeFailed = false;
 
         do
         {
@@ -206,6 +207,11 @@ public class CategoryMigrationService : ICategoryMigrationService
                     {
                         if (await WriteBatch(table, batch, result, cancellationToken))
                             batch.Clear();
+                        else
+                        {
+                            writeFailed = true;
+                            break;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -213,12 +219,12 @@ public class CategoryMigrationService : ICategoryMigrationService
                     HandleDocumentProcessingError(document, result, userContext, ex);
                 }
             }
-        } while (!search.IsDone && !cancellationToken.IsCancellationRequested);
+        } while (!writeFailed && !search.IsDone && !cancellationToken.IsCancellationRequested);
 
         _logger.LogInformation("Scan/Query completed. Total pages: {PageCount}", pageCount);
 
         // Write remaining items in batch
-        if (batch.Any())
+        if (!writeFailed && batch.Any())
         {
             if (!await WriteBatch(table, batch, result, cancellationToken))
                 result.MigratedCount -= batch.Count;
@@ -234,6 +240,7 @@ public class CategoryMigrationService : ICategoryMigrationService
     {
         var batch = new List<Document>();
         var pageCount = 0;
+        var writeFailed = false;
 
         do
         {
@@ -252,6 +259,11 @@ public class CategoryMigrationService : ICategoryMigrationService
                     {
                         if (await WriteBatch(table, batch, result, cancellationToken))
                             batch.Clear();
+                        else
+                        {
+                            writeFailed = true;
+                            break;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -261,11 +273,11 @@ public class CategoryMigrationService : ICategoryMigrationService
             }
 
             scanRequest.ExclusiveStartKey = response.LastEvaluatedKey;
-        } while (scanRequest.ExclusiveStartKey?.Count > 0 && !cancellationToken.IsCancellationRequested);
+        } while (!writeFailed && scanRequest.ExclusiveStartKey?.Count > 0 && !cancellationToken.IsCancellationRequested);
 
         _logger.LogInformation("Scan/Query completed. Total pages: {PageCount}", pageCount);
 
-        if (batch.Any())
+        if (!writeFailed && batch.Any())
         {
             if (!await WriteBatch(table, batch, result, cancellationToken))
                 result.MigratedCount -= batch.Count;
@@ -314,16 +326,24 @@ public class CategoryMigrationService : ICategoryMigrationService
         var primaryCategoryId = primaryCategory.Key;
         var primarySubcategoryIds = primaryCategory.Value;
 
+        // Stage all pending writes locally; only merge into shared state once all steps succeed
+        var pendingWrites = new List<Document>();
+        var pendingMigratedCount = 0;
+
         if (!result.DryRun)
         {
             // Update the existing document with the primary category
             UpdateDocumentWithMigratedCategories(document, primaryCategoryId, primarySubcategoryIds);
-            batch.Add(document);
+            pendingWrites.Add(document);
         }
 
-        result.MigratedCount++;
+        pendingMigratedCount++;
         LogPrimaryMigration(preference, userContext, oldCategoryId, primaryCategoryId, oldSubcategoryIds, primarySubcategoryIds);
-        ProcessAdditionalCategories(document, preference, groupedMigrations, result, batch, userContext);
+        StageAdditionalCategories(document, preference, groupedMigrations, result.DryRun, pendingWrites, ref pendingMigratedCount, userContext);
+
+        // All migration steps completed successfully — merge staged changes into shared state
+        batch.AddRange(pendingWrites);
+        result.MigratedCount += pendingMigratedCount;
     }
 
     private void LogPrimaryMigration(
@@ -350,12 +370,13 @@ public class CategoryMigrationService : ICategoryMigrationService
         }
     }
 
-    private void ProcessAdditionalCategories(
+    private void StageAdditionalCategories(
         Document document,
         UserJobPreferencesDto preference,
         Dictionary<int?, List<int>> groupedMigrations,
-        MigrationResultDto result,
-        List<Document> batch,
+        bool dryRun,
+        List<Document> pendingWrites,
+        ref int pendingMigratedCount,
         string? userContext)
     {
         if (groupedMigrations.Count <= 1)
@@ -367,11 +388,11 @@ public class CategoryMigrationService : ICategoryMigrationService
             var newSubcategoryIds = additionalCategory.Value;
 
             string newEntityId;
-            if (!result.DryRun)
+            if (!dryRun)
             {
                 // Create a new document (preference) for this additional category
                 var newDocument = CreateNewPreferenceDocument(document, newCategoryId, newSubcategoryIds);
-                batch.Add(newDocument);
+                pendingWrites.Add(newDocument);
                 // Extract the actual EntityId that was generated
                 newEntityId = newDocument[EntityIdField].AsString();
             }
@@ -380,7 +401,7 @@ public class CategoryMigrationService : ICategoryMigrationService
                 newEntityId = "(dry-run)";
             }
 
-            result.MigratedCount++;
+            pendingMigratedCount++;
             LogAdditionalMigration(preference, userContext, newEntityId, newCategoryId, newSubcategoryIds);
         }
     }
