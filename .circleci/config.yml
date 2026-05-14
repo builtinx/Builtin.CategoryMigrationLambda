@@ -11,6 +11,7 @@ pipeline-feature: &pipeline-feature
   context:
     - github-packages
     - write-github-packages
+    - SonarCloud
   filters:
     branches:
       ignore:
@@ -31,6 +32,7 @@ pipeline-test: &pipeline-test
     - boilerplate-develop
     - github-packages
     - vault-secrets-develop
+    - SonarCloud
   filters:
     branches:
       only:
@@ -119,7 +121,61 @@ jobs:
     steps:
       - add_ssh_keys
       - checkout
-      - run: dotnet test CategoryMigrationLambda.sln
+      - restore_cache:
+          key: sonar-tools-{{ checksum ".circleci/config.yml" }}
+      - run:
+          name: Install SonarScanner
+          command: dotnet tool update --global dotnet-sonarscanner || dotnet tool install --global dotnet-sonarscanner
+      - save_cache:
+          key: sonar-tools-{{ checksum ".circleci/config.yml" }}
+          paths:
+            - /root/.dotnet/tools
+      - run:
+          name: Add dotnet tools to PATH
+          command: echo 'export PATH="$PATH:/root/.dotnet/tools"' >> $BASH_ENV
+      - run:
+          name: Begin SonarCloud analysis
+          command: |
+            if [ -n "$CIRCLE_PR_NUMBER" ]; then
+              PR_NUMBER="$CIRCLE_PR_NUMBER"
+            elif [ -n "$CIRCLE_PULL_REQUEST" ]; then
+              PR_NUMBER="${CIRCLE_PULL_REQUEST##*/}"
+            fi
+            if [ -n "$PR_NUMBER" ]; then
+              SONAR_BRANCH_ARGS="/d:sonar.pullrequest.key=${PR_NUMBER} /d:sonar.pullrequest.branch=${CIRCLE_BRANCH} /d:sonar.pullrequest.base=main"
+            else
+              SONAR_BRANCH_ARGS="/d:sonar.branch.name=${CIRCLE_BRANCH}"
+            fi
+            if ! dotnet-sonarscanner begin \
+              /o:"builtinx" \
+              /k:"builtinx_${CIRCLE_PROJECT_REPONAME}" \
+              /d:sonar.token="${SONAR_TOKEN}" \
+              /d:sonar.host.url="https://sonarcloud.io" \
+              /d:"sonar.cs.opencover.reportsPaths=**/coverage.opencover.xml" \
+              /d:"sonar.inclusions=CategoryMigrationLambda/**" \
+              /d:"sonar.exclusions=**/bin/**,**/obj/**,**/*Tests.cs,**/*.generated.cs" \
+              /d:"sonar.coverage.exclusions=**/bin/**,**/obj/**" \
+              /d:"sonar.scm.disabled=true" \
+              $SONAR_BRANCH_ARGS; then
+              echo "Failed to initialize SonarCloud analysis"
+              exit 1
+            fi
+      - run:
+          name: Build
+          command: dotnet build --no-incremental
+      - run:
+          name: Run tests with coverage
+          command: |
+            dotnet test CategoryMigrationLambda.sln --collect:"XPlat Code Coverage;Format=opencover" \
+              --results-directory ./test-results \
+              --no-restore --no-build
+      - run:
+          name: End SonarCloud analysis
+          command: |
+            if ! dotnet-sonarscanner end /d:sonar.token="${SONAR_TOKEN}"; then
+              echo "SonarCloud analysis failed"
+              exit 1
+            fi
 
   run-terraform:
     parameters:
