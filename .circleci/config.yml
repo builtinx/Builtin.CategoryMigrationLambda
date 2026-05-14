@@ -378,4 +378,5 @@ workflows:
           <<: *tag-filter
           context:
             - aws-credentials
+            - SonarCloud
           name: "Build and test"
