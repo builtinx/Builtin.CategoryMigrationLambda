@@ -31,6 +31,18 @@ pipeline-test: &pipeline-test
     - boilerplate-terraform-secrets
     - boilerplate-develop
     - github-packages
+    - vault-secrets-develop
+  filters:
+    branches:
+      only:
+        - main
+pipeline-test-with-sonar: &pipeline-test-with-sonar
+  context:
+    - aws-develop
+    - aws-services
+    - boilerplate-terraform-secrets
+    - boilerplate-develop
+    - github-packages
     - SonarCloud
     - vault-secrets-develop
   filters:
@@ -125,7 +137,7 @@ jobs:
           key: sonar-tools-{{ checksum ".circleci/config.yml" }}
       - run:
           name: Install SonarScanner
-          command: dotnet tool update --global dotnet-sonarscanner || dotnet tool install --global dotnet-sonarscanner
+          command: dotnet tool update --global dotnet-sonarscanner --version 11.2.1 || dotnet tool install --global dotnet-sonarscanner --version 11.2.1
       - save_cache:
           key: sonar-tools-{{ checksum ".circleci/config.yml" }}
           paths:
@@ -286,7 +298,7 @@ workflows:
     jobs:
       # 1. Run tests
       - test-lambdas:
-          <<: *pipeline-test
+          <<: *pipeline-test-with-sonar
 
       # 2. Develop deploy
       - run-terraform:
@@ -378,4 +390,5 @@ workflows:
           <<: *tag-filter
           context:
             - aws-credentials
+            - SonarCloud
           name: "Build and test"
