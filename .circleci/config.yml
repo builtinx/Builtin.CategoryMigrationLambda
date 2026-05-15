@@ -37,6 +37,19 @@ pipeline-test: &pipeline-test
     branches:
       only:
         - main
+pipeline-test-with-sonar: &pipeline-test-with-sonar
+  context:
+    - aws-develop
+    - aws-services
+    - boilerplate-terraform-secrets
+    - boilerplate-develop
+    - github-packages
+    - SonarCloud
+    - vault-secrets-develop
+  filters:
+    branches:
+      only:
+        - main
 pipeline-staging: &pipeline-staging
   context:
     - aws-services
@@ -125,7 +138,7 @@ jobs:
           key: sonar-tools-{{ checksum ".circleci/config.yml" }}
       - run:
           name: Install SonarScanner
-          command: dotnet tool update --global dotnet-sonarscanner || dotnet tool install --global dotnet-sonarscanner
+          command: dotnet tool update --global dotnet-sonarscanner --version 11.2.1 || dotnet tool install --global dotnet-sonarscanner --version 11.2.1
       - save_cache:
           key: sonar-tools-{{ checksum ".circleci/config.yml" }}
           paths:
@@ -162,7 +175,7 @@ jobs:
             fi
       - run:
           name: Build
-          command: dotnet build --no-incremental
+          command: dotnet build CategoryMigrationLambda.sln --no-incremental
       - run:
           name: Run tests with coverage
           command: |
@@ -286,7 +299,7 @@ workflows:
     jobs:
       # 1. Run tests
       - test-lambdas:
-          <<: *pipeline-test
+          <<: *pipeline-test-with-sonar
 
       # 2. Develop deploy
       - run-terraform:
