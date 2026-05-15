@@ -37,19 +37,6 @@ pipeline-test: &pipeline-test
     branches:
       only:
         - main
-pipeline-test-with-sonar: &pipeline-test-with-sonar
-  context:
-    - aws-develop
-    - aws-services
-    - boilerplate-terraform-secrets
-    - boilerplate-develop
-    - github-packages
-    - SonarCloud
-    - vault-secrets-develop
-  filters:
-    branches:
-      only:
-        - main
 pipeline-staging: &pipeline-staging
   context:
     - aws-services
@@ -299,7 +286,7 @@ workflows:
     jobs:
       # 1. Run tests
       - test-lambdas:
-          <<: *pipeline-test-with-sonar
+          <<: *pipeline-test
 
       # 2. Develop deploy
       - run-terraform:
