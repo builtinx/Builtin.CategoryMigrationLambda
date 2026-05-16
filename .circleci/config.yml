@@ -122,12 +122,12 @@ jobs:
       - add_ssh_keys
       - checkout
       - restore_cache:
-          key: sonar-tools-{{ checksum ".circleci/config.yml" }}
+          key: sonar-tools-v1-11.2.1
       - run:
           name: Install SonarScanner
           command: dotnet tool update --global dotnet-sonarscanner --version 11.2.1 || dotnet tool install --global dotnet-sonarscanner --version 11.2.1
       - save_cache:
-          key: sonar-tools-{{ checksum ".circleci/config.yml" }}
+          key: sonar-tools-v1-11.2.1
           paths:
             - /root/.dotnet/tools
       - run:
