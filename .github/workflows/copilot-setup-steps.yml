@@ -19,7 +19,7 @@ jobs:
           dotnet-version: "8.0.x"
           source-url: https://nuget.pkg.github.com/builtinx/index.json
         env:
-          NUGET_AUTH_TOKEN: ${{ secrets.GH_PAT_REPO || secrets.GITHUB_TOKEN }}
+          NUGET_AUTH_TOKEN: ${{ secrets.GH_PAT_REPO || github.token }}
 
       - name: Restore NuGet dependencies
         run: dotnet restore CategoryMigrationLambda.sln
